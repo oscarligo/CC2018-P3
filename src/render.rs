@@ -6,6 +6,9 @@ use crate::shaders::{fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
 
+// Render constants
+const PROJECTION_SCALE: f32 = 90.0;
+
 pub fn render(
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
@@ -25,7 +28,7 @@ pub fn render(
             transformed.transformed_position,
             uniforms.camera_pos,
             uniforms.camera_target,
-            90.0,
+            PROJECTION_SCALE,
             width,
             height,
         ) {

@@ -22,10 +22,15 @@ use std::thread;
 use std::time::{Duration, Instant};
 use uniforms::Uniforms;
 
-fn main() {
-    const WINDOW_WIDTH: i32 = 600;
-    const WINDOW_HEIGHT: i32 = 650;
+const WINDOW_WIDTH: i32 = 600;
+const WINDOW_HEIGHT: i32 = 650;
+const WINDOW_TITLE: &str = "Software Renderer";
+const MODEL_PATH: &str = "assets/red_car.obj";
+const FRAME_DELAY: Duration = Duration::from_millis(16);
+const BENCHMARK_REPETITIONS: usize = 7;
+const BENCHMARK_ITERATIONS: usize = 100;
 
+fn main() {
     let arguments: Vec<String> = std::env::args().collect();
     if arguments
         .iter()
@@ -44,11 +49,11 @@ fn main() {
 
     let (mut window, thread) = raylib::init()
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
-        .title("Conway's Game of Life")
+        .title(WINDOW_TITLE)
         .build();
 
     // Load the 3D object from an .obj file
-    let mesh = load_objects::load_obj("assets/red_car.obj").expect("Failed to load .obj file");
+    let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut transformed_vertices = Vec::with_capacity(mesh.vertices.len());
     let mut fragments = Vec::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
@@ -75,9 +80,10 @@ fn main() {
             &mut transformed_vertices,
             &mut fragments,
         );
+        movement.draw_trail(&mut framebuffer, &uniforms);
 
         framebuffer.swap_buffers(&mut window, &thread);
-        thread::sleep(Duration::from_millis(16));
+        thread::sleep(FRAME_DELAY);
     }
 }
 
@@ -97,11 +103,11 @@ fn benchmark_triangles() {
         TriangleMode::FilledBarycentric,
         TriangleMode::FilledScanline,
     ] {
-        let mut measurements = Vec::with_capacity(7);
+        let mut measurements = Vec::with_capacity(BENCHMARK_REPETITIONS);
         let mut fragment_count = 0;
-        for _ in 0..7 {
+        for _ in 0..BENCHMARK_REPETITIONS {
             let start = Instant::now();
-            for _ in 0..100 {
+            for _ in 0..BENCHMARK_ITERATIONS {
                 let fragments = rasterize(black_box(&triangles), mode);
                 fragment_count = fragments.len();
                 black_box(fragments);

@@ -1,5 +1,8 @@
 use raylib::prelude::*;
 
+const COLOR_CHANNEL_MAX: f32 = 255.0;
+const OPAQUE_ALPHA: u8 = 255;
+
 pub struct Framebuffer {
     pub width: u32,
     pub height: u32,
@@ -34,10 +37,10 @@ impl Framebuffer {
             }
             self.depth_buffer[index] = depth;
             let color = Color::new(
-                (color.x.clamp(0.0, 1.0) * 255.0) as u8,
-                (color.y.clamp(0.0, 1.0) * 255.0) as u8,
-                (color.z.clamp(0.0, 1.0) * 255.0) as u8,
-                255,
+                (color.x.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                (color.y.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                (color.z.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                OPAQUE_ALPHA,
             );
             self.color_buffer.draw_pixel(x, y, color);
         }

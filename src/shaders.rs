@@ -4,6 +4,10 @@ use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
 use raylib::prelude::*;
 
+// Shader constants
+const TRANSPARENCY_CUTOFF: u8 = 16;
+const COLOR_CHANNEL_MAX: f32 = 255.0;
+
 fn multiply_matrix_vector4(matrix: &Matrix, vector: &Vector4) -> Vector4 {
     Vector4::new(
         matrix.m0 * vector.x + matrix.m4 * vector.y + matrix.m8 * vector.z + matrix.m12 * vector.w,
@@ -36,12 +40,12 @@ pub fn fragment_shader(fragment: &Fragment, materials: &[Material]) -> Option<Ve
     let x = (uv.x.clamp(0.0, 1.0) * (texture.width() - 1) as f32) as u32;
     let y = ((1.0 - uv.y).clamp(0.0, 1.0) * (texture.height() - 1) as f32) as u32;
     let pixel = texture.get_pixel(x, y).0;
-    if pixel[3] < 16 {
+    if pixel[3] < TRANSPARENCY_CUTOFF {
         return None;
     }
     Some(Vector3::new(
-        pixel[0] as f32 / 255.0,
-        pixel[1] as f32 / 255.0,
-        pixel[2] as f32 / 255.0,
+        pixel[0] as f32 / COLOR_CHANNEL_MAX,
+        pixel[1] as f32 / COLOR_CHANNEL_MAX,
+        pixel[2] as f32 / COLOR_CHANNEL_MAX,
     ))
 }

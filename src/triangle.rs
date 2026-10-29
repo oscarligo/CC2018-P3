@@ -3,7 +3,10 @@ use crate::line::line;
 use crate::vertex::Vertex;
 use raylib::prelude::Vector2;
 
+// Triangle constants
 const EPSILON: f32 = 1e-5;
+const PIXEL_CENTER_OFFSET: f32 = 0.5;
+const SCANLINE_INTERSECTION_CAPACITY: usize = 2;
 
 pub fn triangle(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
     let mut fragments = line(a, b);
@@ -92,7 +95,10 @@ pub fn triangle_barycentric(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment>
 
     for y in min_y..max_y {
         for x in min_x..max_x {
-            let center = Vector2::new(x as f32 + 0.5, y as f32 + 0.5);
+            let center = Vector2::new(
+                x as f32 + PIXEL_CENTER_OFFSET,
+                y as f32 + PIXEL_CENTER_OFFSET,
+            );
             let weights = barycentric(center, points, area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
                 fragments.push(fragment_at(center, [a, b, c], weights));
@@ -130,8 +136,8 @@ pub fn triangle_scanline(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
     let mut fragments = Vec::new();
 
     for y in min_y..max_y {
-        let sample_y = y as f32 + 0.5;
-        let mut intersections = Vec::with_capacity(2);
+        let sample_y = y as f32 + PIXEL_CENTER_OFFSET;
+        let mut intersections = Vec::with_capacity(SCANLINE_INTERSECTION_CAPACITY);
 
         for (start, end) in edges {
             let crosses = (start.y <= sample_y && sample_y < end.y)
@@ -146,11 +152,11 @@ pub fn triangle_scanline(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
             continue;
         }
         intersections.sort_by(f32::total_cmp);
-        let min_x = (intersections[0] - 0.5).ceil() as i32;
-        let max_x = (intersections[1] - 0.5).floor() as i32;
+        let min_x = (intersections[0] - PIXEL_CENTER_OFFSET).ceil() as i32;
+        let max_x = (intersections[1] - PIXEL_CENTER_OFFSET).floor() as i32;
 
         for x in min_x..=max_x {
-            let center = Vector2::new(x as f32 + 0.5, sample_y);
+            let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
             let weights = barycentric(center, points, area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
                 fragments.push(fragment_at(center, [a, b, c], weights));

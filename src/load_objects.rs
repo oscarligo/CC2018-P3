@@ -6,6 +6,14 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::Path;
 
+const POSITION_CAPACITY: usize = 1024;
+const TEXTURE_COORD_CAPACITY: usize = 1024;
+const VERTEX_CAPACITY: usize = 2048;
+const INDEX_CAPACITY: usize = 2048;
+const LINE_BUFFER_CAPACITY: usize = 128;
+const NEAR_CLIP_DISTANCE: f32 = 0.1;
+const WORLD_UP: [f32; 3] = [0.0, 1.0, 0.0];
+
 pub struct Material {
     pub diffuse_texture: Option<RgbaImage>,
 }
@@ -21,16 +29,16 @@ pub fn load_obj(path: &str) -> Result<Mesh, Box<dyn std::error::Error>> {
     let file = File::open(obj_path)?;
     let mut reader = BufReader::new(file);
 
-    let mut positions: Vec<Vector3> = Vec::with_capacity(1024);
-    let mut tex_coords: Vec<Vector2> = Vec::with_capacity(1024);
-    let mut vertices: Vec<Vertex> = Vec::with_capacity(2048);
-    let mut indices: Vec<u32> = Vec::with_capacity(2048);
+    let mut positions: Vec<Vector3> = Vec::with_capacity(POSITION_CAPACITY);
+    let mut tex_coords: Vec<Vector2> = Vec::with_capacity(TEXTURE_COORD_CAPACITY);
+    let mut vertices: Vec<Vertex> = Vec::with_capacity(VERTEX_CAPACITY);
+    let mut indices: Vec<u32> = Vec::with_capacity(INDEX_CAPACITY);
     let mut materials = vec![Material {
         diffuse_texture: None,
     }];
     let mut material_indices = HashMap::new();
     let mut current_material = 0;
-    let mut line_buffer = String::with_capacity(128);
+    let mut line_buffer = String::with_capacity(LINE_BUFFER_CAPACITY);
 
     while reader.read_line(&mut line_buffer)? > 0 {
         let trimmed = line_buffer.trim();
@@ -169,14 +177,17 @@ pub fn project_vertex(
     height: f32,
 ) -> Option<(Vector2, f32)> {
     let forward = normalize(camera_target - camera_pos)?;
-    let right = normalize(cross(Vector3::new(0.0, 1.0, 0.0), forward))?;
+    let right = normalize(cross(
+        Vector3::new(WORLD_UP[0], WORLD_UP[1], WORLD_UP[2]),
+        forward,
+    ))?;
     let up = cross(forward, right);
     let relative = v - camera_pos;
     let camera_x = dot(relative, right);
     let camera_y = dot(relative, up);
     let z = dot(relative, forward);
 
-    if z <= 0.1 {
+    if z <= NEAR_CLIP_DISTANCE {
         return None;
     }
 
