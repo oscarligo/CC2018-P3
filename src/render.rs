@@ -24,6 +24,7 @@ pub fn render(
         transformed.screen_position = project_vertex(
             transformed.transformed_position,
             uniforms.camera_pos,
+            uniforms.camera_target,
             90.0,
             width,
             height,

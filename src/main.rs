@@ -1,5 +1,6 @@
 mod fragment;
 mod framebuffer;
+mod input;
 mod line;
 mod load_objects;
 mod rasterizer;
@@ -10,6 +11,7 @@ mod uniforms;
 mod vertex;
 
 use framebuffer::Framebuffer;
+use input::InputController;
 use rasterizer::{rasterize, TriangleMode};
 use raylib::prelude::*;
 use render::render;
@@ -49,49 +51,17 @@ fn main() {
     let mut fragments = Vec::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
 
-    // moves the camera position to view the object from a different angle
-    let camera_pos = Vector3::new(10.0, 2.0, -2.0);
     let mut uniforms = Uniforms {
         model_matrix: Matrix::identity(),
-        camera_pos,
+        camera_pos: Vector3::zero(),
+        camera_target: Vector3::zero(),
     };
-    let mut rotation_x = 0.0;
-    let mut rotation_y = 0.0;
+    let mut input = InputController::new(&mesh);
+    input.update(&window, &mut uniforms);
 
     while !window.window_should_close() {
         framebuffer.clear();
-        let rotation_step = 1.5 * window.get_frame_time();
-
-        // Handle camera movement based on user input
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_W) {
-            // Move camera forward
-            uniforms.camera_pos += Vector3::new(0.0, 0.1, 0.0);
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_S) {
-            // Move camera backward
-            uniforms.camera_pos -= Vector3::new(0.0, 0.1, 0.0);
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_A) {
-            // Move camera left
-            uniforms.camera_pos -= Vector3::new(0.1, 0.0, 0.0);
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_D) {
-            // Move camera right
-            uniforms.camera_pos += Vector3::new(0.1, 0.0, 0.0);
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_LEFT) {
-            rotation_y -= rotation_step;
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_RIGHT) {
-            rotation_y += rotation_step;
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_UP) {
-            rotation_x -= rotation_step;
-        }
-        if window.is_key_down(raylib::consts::KeyboardKey::KEY_DOWN) {
-            rotation_x += rotation_step;
-        }
-        uniforms.model_matrix = Matrix::rotate_xyz(Vector3::new(rotation_x, rotation_y, 0.0));
+        input.update(&window, &mut uniforms);
 
         // Render the 3D object to the framebuffer
         render(
