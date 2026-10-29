@@ -6,15 +6,17 @@ mod load_objects;
 mod rasterizer;
 mod render;
 mod shaders;
+mod ship_movement;
 mod triangle;
 mod uniforms;
 mod vertex;
 
 use framebuffer::Framebuffer;
-use input::InputController;
+use input::InputState;
 use rasterizer::{rasterize, TriangleMode};
 use raylib::prelude::*;
 use render::render;
+use ship_movement::ShipMovement;
 use std::hint::black_box;
 use std::thread;
 use std::time::{Duration, Instant};
@@ -56,12 +58,13 @@ fn main() {
         camera_pos: Vector3::zero(),
         camera_target: Vector3::zero(),
     };
-    let mut input = InputController::new(&mesh);
-    input.update(&window, &mut uniforms);
+    let mut movement = ShipMovement::new(&mesh);
+    movement.update(&InputState::read(&window), 0.0, &mut uniforms);
 
     while !window.window_should_close() {
         framebuffer.clear();
-        input.update(&window, &mut uniforms);
+        let input = InputState::read(&window);
+        movement.update(&input, window.get_frame_time(), &mut uniforms);
 
         // Render the 3D object to the framebuffer
         render(

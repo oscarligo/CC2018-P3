@@ -27,7 +27,7 @@ pub fn line(start: &Vertex, end: &Vertex) -> Vec<Fragment> {
             position: Vector2::new(x0 as f32, y0 as f32),
             color: start.color,
             depth: start.camera_depth,
-            tex_coord: start.tex_coord, 
+            tex_coord: start.tex_coord,
             material_index: start.material_index,
         });
 
