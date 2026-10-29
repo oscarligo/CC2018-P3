@@ -46,7 +46,7 @@ fn main() {
         .build();
 
     // Load the 3D object from an .obj file
-    let mesh = load_objects::load_obj("assets/ship.obj").expect("Failed to load .obj file");
+    let mesh = load_objects::load_obj("assets/red_car.obj").expect("Failed to load .obj file");
     let mut transformed_vertices = Vec::with_capacity(mesh.vertices.len());
     let mut fragments = Vec::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
@@ -86,6 +86,7 @@ fn benchmark_triangles() {
     ];
     for vertex in &mut vertices {
         vertex.screen_position = Some(Vector2::new(vertex.position.x, vertex.position.y));
+        vertex.camera_depth = 1.0;
     }
     let triangles = vec![vertices];
 

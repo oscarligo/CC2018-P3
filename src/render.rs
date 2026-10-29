@@ -21,14 +21,19 @@ pub fn render(
     transformed_vertices.clear();
     transformed_vertices.extend(mesh.vertices.iter().map(|vertex| {
         let mut transformed = vertex_shader(vertex, uniforms);
-        transformed.screen_position = project_vertex(
+        if let Some((screen_position, depth)) = project_vertex(
             transformed.transformed_position,
             uniforms.camera_pos,
             uniforms.camera_target,
             90.0,
             width,
             height,
-        );
+        ) {
+            transformed.screen_position = Some(screen_position);
+            transformed.camera_depth = depth;
+        } else {
+            transformed.screen_position = None;
+        }
         transformed
     }));
 
@@ -37,11 +42,14 @@ pub fn render(
 
     // 3. Fragment Processing
     for fragment in fragments.iter() {
-        let color = fragment_shader(fragment);
+        let Some(color) = fragment_shader(fragment, &mesh.materials) else {
+            continue;
+        };
 
         framebuffer.point(
             fragment.position.x as i32,
             fragment.position.y as i32,
+            fragment.depth,
             color,
         );
     }

@@ -26,7 +26,9 @@ pub fn line(start: &Vertex, end: &Vertex) -> Vec<Fragment> {
         fragments.push(Fragment {
             position: Vector2::new(x0 as f32, y0 as f32),
             color: start.color,
-            depth: start.transformed_position.z,
+            depth: start.camera_depth,
+            tex_coord: start.tex_coord, 
+            material_index: start.material_index,
         });
 
         if x0 == x1 && y0 == y1 {

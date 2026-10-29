@@ -9,7 +9,7 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 2
-map_Kd PSX_Style_Cars_by_GGBot_(August2023)/Car 04/textures/dog.png
+map_Kd textures/dog.png
 
 newmtl car4_mat
 Ns 11.111113
@@ -19,4 +19,4 @@ Ke 0.000000 0.000000 0.000000
 Ni 1.500000
 d 1.000000
 illum 1
-map_Kd PSX_Style_Cars_by_GGBot_(August2023)/Car 04/car4.png
+map_Kd textures/car.png

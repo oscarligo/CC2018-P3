@@ -21,17 +21,33 @@ fn edge(a: Vector2, b: Vector2, point: Vector2) -> f32 {
 }
 
 fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> Fragment {
-    let color = vertices[0].color * weights[0]
-        + vertices[1].color * weights[1]
-        + vertices[2].color * weights[2];
-    let depth = vertices[0].transformed_position.z * weights[0]
-        + vertices[1].transformed_position.z * weights[1]
-        + vertices[2].transformed_position.z * weights[2];
+    let inverse_depth = weights[0] / vertices[0].camera_depth
+        + weights[1] / vertices[1].camera_depth
+        + weights[2] / vertices[2].camera_depth;
+    let corrected = [
+        weights[0] / vertices[0].camera_depth / inverse_depth,
+        weights[1] / vertices[1].camera_depth / inverse_depth,
+        weights[2] / vertices[2].camera_depth / inverse_depth,
+    ];
+    let color = vertices[0].color * corrected[0]
+        + vertices[1].color * corrected[1]
+        + vertices[2].color * corrected[2];
+    let depth = 1.0 / inverse_depth;
+    let tex_coord = match (
+        vertices[0].tex_coord,
+        vertices[1].tex_coord,
+        vertices[2].tex_coord,
+    ) {
+        (Some(a), Some(b), Some(c)) => Some(a * corrected[0] + b * corrected[1] + c * corrected[2]),
+        _ => None,
+    };
 
     Fragment {
         position,
         color,
         depth,
+        tex_coord,
+        material_index: vertices[0].material_index,
     }
 }
 
