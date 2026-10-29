@@ -22,3 +22,23 @@ pub fn rasterize(triangles: &[[Vertex; 3]], mode: TriangleMode) -> Vec<Fragment>
 
     fragments
 }
+
+pub fn rasterize_indexed(
+    vertices: &[Vertex],
+    indices: &[u32],
+    mode: TriangleMode,
+    fragments: &mut Vec<Fragment>,
+) {
+    fragments.clear();
+
+    for indices in indices.chunks_exact(3) {
+        let a = &vertices[indices[0] as usize];
+        let b = &vertices[indices[1] as usize];
+        let c = &vertices[indices[2] as usize];
+        fragments.extend(match mode {
+            TriangleMode::Wireframe => triangle(a, b, c),
+            TriangleMode::FilledBarycentric => triangle_barycentric(a, b, c),
+            TriangleMode::FilledScanline => triangle_scanline(a, b, c),
+        });
+    }
+}

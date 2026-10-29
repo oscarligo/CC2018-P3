@@ -3,7 +3,12 @@ use raylib::prelude::{Vector2, Vector3};
 use std::fs::File;
 use std::io::{BufRead, BufReader};
 
-pub fn load_obj(path: &str) -> Result<Vec<Vertex>, Box<dyn std::error::Error>> {
+pub struct Mesh {
+    pub vertices: Vec<Vertex>,
+    pub indices: Vec<u32>,
+}
+
+pub fn load_obj(path: &str) -> Result<Mesh, Box<dyn std::error::Error>> {
     let file = File::open(path)?;
     let mut reader = BufReader::new(file);
 
@@ -33,8 +38,8 @@ pub fn load_obj(path: &str) -> Result<Vec<Vertex>, Box<dyn std::error::Error>> {
                         let token = parts.next().ok_or("Expected 3 vertices per face")?;
                         let v_str = token.split('/').next().ok_or("Invalid face format")?;
                         let v_idx: usize = v_str.parse()?;
-
-                        indices.push((v_idx - 1) as u32);
+                        let index = v_idx.checked_sub(1).ok_or("OBJ indices start at 1")?;
+                        indices.push(u32::try_from(index)?);
                     }
                 }
                 _ => {}
@@ -44,16 +49,17 @@ pub fn load_obj(path: &str) -> Result<Vec<Vertex>, Box<dyn std::error::Error>> {
         line_buffer.clear();
     }
 
-    indices
-        .into_iter()
-        .map(|index| {
-            vertices
-                .get(index as usize)
-                .copied()
-                .map(Vertex::new)
-                .ok_or_else(|| format!("Vertex index {} is out of bounds", index + 1).into())
-        })
-        .collect()
+    if let Some(index) = indices
+        .iter()
+        .find(|index| **index as usize >= vertices.len())
+    {
+        return Err(format!("Vertex index {} is out of bounds", index + 1).into());
+    }
+
+    Ok(Mesh {
+        vertices: vertices.into_iter().map(Vertex::new).collect(),
+        indices,
+    })
 }
 
 pub fn project_vertex(
@@ -69,7 +75,8 @@ pub fn project_vertex(
         return None;
     }
 
-    let x = (v.x - camera_pos.x) / z * fov_scale + (width / 2.0);
+    let aspect_ratio = width / height;
+    let x = (v.x - camera_pos.x) / z * fov_scale / aspect_ratio + (width / 2.0);
     let y = -(v.y - camera_pos.y) / z * fov_scale + (height / 2.0);
 
     Some(Vector2::new(x, y))
