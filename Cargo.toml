@@ -1,0 +1,13 @@
+[package]
+name = "CC2018-LAB1"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+raylib = { version = "6.0.0", features = ["SUPPORT_IMAGE_GENERATION"] }
+image = "0.25"
+flamegraph = "0.6.14"
+
+[profile.release]
+debug = true
+
