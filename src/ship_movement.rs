@@ -21,12 +21,65 @@ const SHIP_TILT_SPEED: f32 = 2.5;
 // Trail constants
 const TRAIL_CAPACITY: usize = 64;
 const TRAIL_SPEED_FACTOR: f32 = 2.0;
-const TRAIL_PARTICLE_LIFETIME: f32 = 2.0;
+const TRAIL_PARTICLE_LIFETIME: f32 = 0.3;
 const TRAIL_EMISSION_INTERVAL: f32 = 1.0 / 30.0;
 const TRAIL_PROJECTION_SCALE: f32 = 90.0;
-const TRAIL_COLOR: [f32; 3] = [1.0, 1.0, 1.0];
-const TRAIL_POINT_RADIUS: i32 = 1;
+
+// Trail visual
+const TRAIL_COLOR: [f32; 3] = [0.8, 0.8, 0.8];
+const TRAIL_POINT_RADIUS: i32 = 0;
+const TRAIL_MIN_POINT_RADIUS: i32 = 0;
+const TRAIL_MAX_POINT_RADIUS: i32 = 1;
 const LOCAL_BACKWARD: [f32; 3] = [0.0, 0.0, -1.0];
+
+
+// ROCKET EXHAUST CONSTANTS 
+const EXHAUST_CAPACITY: usize = 1200;
+
+// Lifetimes
+const CORE_LIFETIME: f32 = 0.18;
+const FLAME_LIFETIME: f32 = 0.44;
+const SPARK_LIFETIME: f32 = 0.28;
+const SMOKE_LIFETIME: f32 = 1.35;
+
+// Base emission intervals
+const CORE_EMISSION_INTERVAL: f32 = 1.0 / 95.0;
+const FLAME_EMISSION_INTERVAL: f32 = 1.0 / 85.0;
+const SPARK_EMISSION_INTERVAL: f32 = 1.0 / 65.0;
+const SMOKE_EMISSION_INTERVAL: f32 = 1.0 / 16.0;
+const EXHAUST_CLOSE_DENSITY_BOOST: f32 = 1.25;
+const EXHAUST_CLOSE_MAX_DENSITY: f32 = 12.0;
+
+// Speed factors
+const CORE_SPEED_FACTOR: f32 = 2.6;
+const FLAME_SPEED_FACTOR: f32 = 1.7;
+const SPARK_SPEED_FACTOR: f32 = 3.0;
+const SMOKE_SPEED_FACTOR: f32 = 0.45;
+const SMOKE_DRAG: f32 = 1.6;
+const SMOKE_RISE_FACTOR: f32 = 0.22;
+
+// Conical spread
+const CORE_SPREAD: f32 = 0.05;
+const FLAME_SPREAD: f32 = 0.22;
+const SPARK_SPREAD: f32 = 0.52;
+const SMOKE_SPREAD: f32 = 0.36;
+
+// Thermal color palette
+const COLOR_CORE_HOT: [f32; 3] = [0.88, 0.96, 1.0]; 
+const COLOR_CORE_WARM: [f32; 3] = [1.0, 0.92, 0.45];
+const COLOR_FLAME_HOT: [f32; 3] = [1.0, 0.82, 0.2]; 
+const COLOR_FLAME_MID: [f32; 3] = [1.0, 0.36, 0.03];
+const COLOR_FLAME_COOL: [f32; 3] = [0.42, 0.06, 0.01];
+const COLOR_SPARK: [f32; 3] = [1.0, 0.95, 0.65]; 
+const COLOR_SMOKE_START: [f32; 3] = [0.26, 0.24, 0.24]; 
+const COLOR_SMOKE_END: [f32; 3] = [0.65, 0.68, 0.72]; 
+
+// Exhaust visual
+const EXHAUST_BASE_RADIUS: f32 = 4.8;
+const EXHAUST_MIN_RADIUS: i32 = 0;
+const EXHAUST_FAR_MAX_RADIUS: i32 = 1;
+const EXHAUST_CLOSE_MAX_RADIUS: i32 = 20;
+const EXHAUST_CLOSE_GROWTH: f32 = 3.0;
 
 pub struct ShipMovement {
     target: Vector3,
@@ -42,12 +95,36 @@ pub struct ShipMovement {
     trail: Vec<TrailParticle>,
     trail_speed: f32,
     emission_timer: f32,
+    rear_point: Vector3,
+    exhaust: Vec<ExhaustParticle>,
+    core_timer: f32,
+    flame_timer: f32,
+    spark_timer: f32,
+    smoke_timer: f32,
+    rng_state: u32,
 }
 
 struct TrailParticle {
     position: Vector3,
     velocity: Vector3,
     lifetime: f32,
+    wing: usize,
+}
+
+#[derive(Clone, Copy)]
+enum ExhaustKind {
+    Core,
+    Flame,
+    Spark,
+    Smoke,
+}
+
+struct ExhaustParticle {
+    position: Vector3,
+    velocity: Vector3,
+    lifetime: f32,
+    max_lifetime: f32,
+    kind: ExhaustKind,
 }
 
 impl ShipMovement {
@@ -87,6 +164,12 @@ impl ShipMovement {
             .max_by(|a, b| a.position.x.total_cmp(&b.position.x))
             .map(|vertex| vertex.position)
             .unwrap_or(target);
+        let rear_point = mesh
+            .vertices
+            .iter()
+            .min_by(|a, b| a.position.z.total_cmp(&b.position.z))
+            .map(|vertex| vertex.position)
+            .unwrap_or(target);
 
         Self {
             target,
@@ -102,7 +185,25 @@ impl ShipMovement {
             trail: Vec::with_capacity(TRAIL_CAPACITY),
             trail_speed: radius * TRAIL_SPEED_FACTOR,
             emission_timer: 0.0,
+            rear_point,
+            exhaust: Vec::with_capacity(EXHAUST_CAPACITY),
+            core_timer: 0.0,
+            flame_timer: 0.0,
+            spark_timer: 0.0,
+            smoke_timer: 0.0,
+            rng_state: 0x8542_5987,
         }
+    }
+
+    fn next_rand_f32(&mut self) -> f32 {
+        self.rng_state ^= self.rng_state << 13;
+        self.rng_state ^= self.rng_state >> 17;
+        self.rng_state ^= self.rng_state << 5;
+        (self.rng_state as f32) / (u32::MAX as f32)
+    }
+
+    fn next_rand_bipolar(&mut self) -> f32 {
+        self.next_rand_f32() * 2.0 - 1.0
     }
 
     pub fn update(&mut self, input: &InputState, frame_time: f32, uniforms: &mut Uniforms) {
@@ -110,6 +211,7 @@ impl ShipMovement {
         self.update_ship(input, frame_time);
         self.apply(uniforms);
         self.update_trail(input.trail, frame_time, uniforms);
+        self.update_exhaust(input.trail, frame_time, uniforms);
     }
 
     fn update_camera(&mut self, input: &InputState) {
@@ -177,17 +279,23 @@ impl ShipMovement {
                 &uniforms.model_matrix,
                 Vector3::new(LOCAL_BACKWARD[0], LOCAL_BACKWARD[1], LOCAL_BACKWARD[2]),
             );
-            for wing_tip in self.wing_tips {
+            for (wing, wing_tip) in self.wing_tips.into_iter().enumerate() {
                 self.trail.push(TrailParticle {
                     position: transform_point(&uniforms.model_matrix, wing_tip),
                     velocity: backward * self.trail_speed,
                     lifetime: TRAIL_PARTICLE_LIFETIME,
+                    wing,
                 });
             }
         }
     }
 
     pub fn draw_trail(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
+        let point_radius = scaled_trail_radius(
+            self.camera_distance,
+            self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR,
+        );
+        let mut previous = [None, None];
         for particle in &self.trail {
             let Some((position, depth)) = project_vertex(
                 particle.position,
@@ -201,11 +309,278 @@ impl ShipMovement {
             };
             let intensity = (particle.lifetime / TRAIL_PARTICLE_LIFETIME).clamp(0.0, 1.0);
             let color = Vector3::new(TRAIL_COLOR[0], TRAIL_COLOR[1], TRAIL_COLOR[2]) * intensity;
-            for y in -TRAIL_POINT_RADIUS..=TRAIL_POINT_RADIUS {
-                for x in -TRAIL_POINT_RADIUS..=TRAIL_POINT_RADIUS {
-                    framebuffer.point(position.x as i32 + x, position.y as i32 + y, depth, color);
-                }
+            if let Some((start, start_depth)) = previous[particle.wing] {
+                draw_thick_line(
+                    framebuffer,
+                    start,
+                    position,
+                    start_depth,
+                    depth,
+                    point_radius,
+                    color,
+                );
+            } else {
+                draw_square(framebuffer, position, depth, point_radius, color);
             }
+            previous[particle.wing] = Some((position, depth));
+        }
+    }
+
+    fn update_exhaust(&mut self, emitting: bool, frame_time: f32, uniforms: &Uniforms) {
+        for particle in &mut self.exhaust {
+            if matches!(particle.kind, ExhaustKind::Smoke) {
+                particle.velocity *= (1.0 - SMOKE_DRAG * frame_time).max(0.0);
+            }
+            particle.position += particle.velocity * frame_time;
+            particle.lifetime -= frame_time;
+        }
+        self.exhaust.retain(|particle| particle.lifetime > 0.0);
+
+        if !emitting {
+            self.core_timer = 0.0;
+            self.flame_timer = 0.0;
+            self.spark_timer = 0.0;
+            self.smoke_timer = 0.0;
+            return;
+        }
+
+        self.core_timer = (self.core_timer + frame_time).min(0.2);
+        self.flame_timer = (self.flame_timer + frame_time).min(0.2);
+        self.spark_timer = (self.spark_timer + frame_time).min(0.2);
+        self.smoke_timer = (self.smoke_timer + frame_time).min(0.2);
+
+        let origin = transform_point(&uniforms.model_matrix, self.rear_point);
+        let backward = transform_direction(
+            &uniforms.model_matrix,
+            Vector3::new(LOCAL_BACKWARD[0], LOCAL_BACKWARD[1], LOCAL_BACKWARD[2]),
+        );
+        let local_right = transform_direction(&uniforms.model_matrix, Vector3::new(1.0, 0.0, 0.0));
+        let local_up = transform_direction(&uniforms.model_matrix, Vector3::new(0.0, 1.0, 0.0));
+
+        let ship_radius = self.trail_speed / TRAIL_SPEED_FACTOR;
+        let nozzle_radius = ship_radius * 0.085;
+
+        let reference_distance = self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR;
+        let zoom_ratio = reference_distance / self.camera_distance.max(0.001);
+        let emission_density = if zoom_ratio > 1.0 {
+            (zoom_ratio * zoom_ratio * EXHAUST_CLOSE_DENSITY_BOOST).min(EXHAUST_CLOSE_MAX_DENSITY)
+        } else {
+            zoom_ratio.clamp(0.8, 1.0)
+        };
+
+        let core_interval = CORE_EMISSION_INTERVAL / emission_density;
+        let flame_interval = FLAME_EMISSION_INTERVAL / emission_density;
+        let spark_interval = SPARK_EMISSION_INTERVAL / emission_density;
+        let smoke_interval = SMOKE_EMISSION_INTERVAL / emission_density.min(2.5);
+
+        while self.core_timer >= core_interval {
+            self.core_timer -= core_interval;
+            let jitter_x = self.next_rand_bipolar() * CORE_SPREAD;
+            let jitter_y = self.next_rand_bipolar() * CORE_SPREAD;
+            let speed = self.trail_speed * CORE_SPEED_FACTOR * (0.9 + self.next_rand_f32() * 0.2);
+            let velocity = backward * speed
+                + local_right * (jitter_x * self.trail_speed)
+                + local_up * (jitter_y * self.trail_speed);
+            let sub_step = self.next_rand_f32() * frame_time * 0.5;
+            let offset_x = self.next_rand_bipolar() * nozzle_radius * 0.55;
+            let offset_y = self.next_rand_bipolar() * nozzle_radius * 0.55;
+            let spawn_pos =
+                origin + local_right * offset_x + local_up * offset_y + velocity * sub_step;
+
+            self.exhaust.push(ExhaustParticle {
+                position: spawn_pos,
+                velocity,
+                lifetime: CORE_LIFETIME,
+                max_lifetime: CORE_LIFETIME,
+                kind: ExhaustKind::Core,
+            });
+        }
+
+        while self.flame_timer >= flame_interval {
+            self.flame_timer -= flame_interval;
+            let jitter_x = self.next_rand_bipolar() * FLAME_SPREAD;
+            let jitter_y = self.next_rand_bipolar() * FLAME_SPREAD;
+            let speed = self.trail_speed * FLAME_SPEED_FACTOR * (0.8 + self.next_rand_f32() * 0.4);
+            let velocity = backward * speed
+                + local_right * (jitter_x * self.trail_speed)
+                + local_up * (jitter_y * self.trail_speed);
+            let sub_step = self.next_rand_f32() * frame_time * 0.5;
+            let offset_x = self.next_rand_bipolar() * nozzle_radius * 0.95;
+            let offset_y = self.next_rand_bipolar() * nozzle_radius * 0.95;
+            let spawn_pos =
+                origin + local_right * offset_x + local_up * offset_y + velocity * sub_step;
+
+            self.exhaust.push(ExhaustParticle {
+                position: spawn_pos,
+                velocity,
+                lifetime: FLAME_LIFETIME,
+                max_lifetime: FLAME_LIFETIME,
+                kind: ExhaustKind::Flame,
+            });
+        }
+
+        while self.spark_timer >= spark_interval {
+            self.spark_timer -= spark_interval;
+            let jitter_x = self.next_rand_bipolar() * SPARK_SPREAD;
+            let jitter_y = self.next_rand_bipolar() * SPARK_SPREAD;
+            let speed = self.trail_speed * SPARK_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.6);
+            let velocity = backward * speed
+                + local_right * (jitter_x * self.trail_speed)
+                + local_up * (jitter_y * self.trail_speed);
+            let offset_x = self.next_rand_bipolar() * nozzle_radius * 0.5;
+            let offset_y = self.next_rand_bipolar() * nozzle_radius * 0.5;
+            let spawn_pos = origin + local_right * offset_x + local_up * offset_y;
+            let lifetime = SPARK_LIFETIME * (0.7 + self.next_rand_f32() * 0.6);
+
+            self.exhaust.push(ExhaustParticle {
+                position: spawn_pos,
+                velocity,
+                lifetime,
+                max_lifetime: SPARK_LIFETIME,
+                kind: ExhaustKind::Spark,
+            });
+        }
+
+        while self.smoke_timer >= smoke_interval {
+            self.smoke_timer -= smoke_interval;
+            let jitter_x = self.next_rand_bipolar() * SMOKE_SPREAD;
+            let jitter_y = self.next_rand_bipolar() * SMOKE_SPREAD;
+            let speed = self.trail_speed * SMOKE_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.5);
+            let offset_x = self.next_rand_bipolar() * nozzle_radius;
+            let offset_y = self.next_rand_bipolar() * nozzle_radius;
+            let spawn_pos = origin + local_right * offset_x + local_up * offset_y;
+            let velocity = backward * speed
+                + local_right * (jitter_x * self.trail_speed)
+                + local_up * (jitter_y * self.trail_speed)
+                + Vector3::new(0.0, self.trail_speed * SMOKE_RISE_FACTOR, 0.0);
+
+            self.exhaust.push(ExhaustParticle {
+                position: spawn_pos,
+                velocity,
+                lifetime: SMOKE_LIFETIME,
+                max_lifetime: SMOKE_LIFETIME,
+                kind: ExhaustKind::Smoke,
+            });
+        }
+    }
+
+    pub fn draw_exhaust(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
+        let reference_distance = self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR;
+
+        for particle in &self.exhaust {
+            let Some((position, depth)) = project_vertex(
+                particle.position,
+                uniforms.camera_pos,
+                uniforms.camera_target,
+                TRAIL_PROJECTION_SCALE,
+                framebuffer.width as f32,
+                framebuffer.height as f32,
+            ) else {
+                continue;
+            };
+
+            let dist_to_cam = (particle.position - uniforms.camera_pos).length().max(0.1);
+            let raw_scale = reference_distance / dist_to_cam;
+
+            // t = 1.0 (pegado al origen/tobera), t = 0.0 (lejos del origen/extinguiéndose)
+            let t = (particle.lifetime / particle.max_lifetime).clamp(0.0, 1.0);
+            // Boost concentrado en el origen (salida de la tobera)
+            let origin_boost = t * t * t;
+
+            let (color, radius_mult) = match particle.kind {
+                ExhaustKind::Core => {
+                    let base_col = lerp_color(COLOR_CORE_WARM, COLOR_CORE_HOT, t);
+                    let intensity = 0.85 + 0.15 * t;
+                    // Grande en el origen (t=1.0), se afila a chispa pequeña al salir
+                    (base_col * intensity, 0.65 + origin_boost * 1.15)
+                }
+                ExhaustKind::Flame => {
+                    let base_col = if t > 0.5 {
+                        lerp_color(COLOR_FLAME_MID, COLOR_FLAME_HOT, (t - 0.5) * 2.0)
+                    } else {
+                        lerp_color(COLOR_FLAME_COOL, COLOR_FLAME_MID, t * 2.0)
+                    };
+                    let intensity = (t * 1.35).min(1.0);
+                    // Muy prominente al salir del origen y se encoge como chispas al alejarse
+                    (base_col * intensity, 0.55 + t * 0.65 + origin_boost * 0.95)
+                }
+                ExhaustKind::Spark => {
+                    let base_col = lerp_color(COLOR_FLAME_MID, COLOR_SPARK, t);
+                    (base_col * (0.85 + 0.15 * t), 0.35 + origin_boost * 0.65)
+                }
+                ExhaustKind::Smoke => {
+                    let progress = 1.0 - t;
+                    let base_col = lerp_color(COLOR_SMOKE_START, COLOR_SMOKE_END, progress);
+                    let alpha = (t * 0.6).clamp(0.0, 1.0);
+                    (base_col * alpha, 0.9 + progress * 1.6)
+                }
+            };
+
+            let far_radius = ((EXHAUST_BASE_RADIUS * radius_mult * raw_scale.min(1.0)).round()
+                as i32)
+                .clamp(EXHAUST_MIN_RADIUS, EXHAUST_FAR_MAX_RADIUS);
+            let close_growth =
+                ((raw_scale - 1.0).max(0.0) * EXHAUST_CLOSE_GROWTH * EXHAUST_CLOSE_DENSITY_BOOST)
+                    .round() as i32;
+            let radius =
+                (far_radius + close_growth).clamp(EXHAUST_MIN_RADIUS, EXHAUST_CLOSE_MAX_RADIUS);
+
+            draw_square(framebuffer, position, depth, radius, color);
+        }
+    }
+}
+
+fn lerp_color(a: [f32; 3], b: [f32; 3], t: f32) -> Vector3 {
+    let t = t.clamp(0.0, 1.0);
+    Vector3::new(
+        a[0] + (b[0] - a[0]) * t,
+        a[1] + (b[1] - a[1]) * t,
+        a[2] + (b[2] - a[2]) * t,
+    )
+}
+
+fn scaled_trail_radius(camera_distance: f32, reference_distance: f32) -> i32 {
+    ((TRAIL_POINT_RADIUS as f32 * reference_distance / camera_distance).round() as i32)
+        .clamp(TRAIL_MIN_POINT_RADIUS, TRAIL_MAX_POINT_RADIUS)
+}
+
+fn draw_thick_line(
+    framebuffer: &mut Framebuffer,
+    start: Vector2,
+    end: Vector2,
+    start_depth: f32,
+    end_depth: f32,
+    radius: i32,
+    color: Vector3,
+) {
+    let delta = end - start;
+    let steps = delta.x.abs().max(delta.y.abs()).ceil() as i32;
+    if steps == 0 {
+        draw_square(framebuffer, start, start_depth, radius, color);
+        return;
+    }
+    for step in 0..=steps {
+        let t = step as f32 / steps as f32;
+        draw_square(
+            framebuffer,
+            start + delta * t,
+            start_depth + (end_depth - start_depth) * t,
+            radius,
+            color,
+        );
+    }
+}
+
+fn draw_square(
+    framebuffer: &mut Framebuffer,
+    position: Vector2,
+    depth: f32,
+    radius: i32,
+    color: Vector3,
+) {
+    for y in -radius..=radius {
+        for x in -radius..=radius {
+            framebuffer.point(position.x as i32 + x, position.y as i32 + y, depth, color);
         }
     }
 }

@@ -81,6 +81,7 @@ fn main() {
             &mut fragments,
         );
         movement.draw_trail(&mut framebuffer, &uniforms);
+        movement.draw_exhaust(&mut framebuffer, &uniforms);
 
         framebuffer.swap_buffers(&mut window, &thread);
         thread::sleep(FRAME_DELAY);
