@@ -3,14 +3,18 @@ mod framebuffer;
 mod input;
 mod line;
 mod load_objects;
+pub mod objects;
+pub mod planets;
 mod rasterizer;
 mod render;
 mod rocket_audio;
+pub mod solar_system;
 mod shaders;
 mod ship_movement;
 mod triangle;
 mod uniforms;
 mod vertex;
+pub mod world;
 
 use framebuffer::Framebuffer;
 use input::InputState;
@@ -19,10 +23,12 @@ use raylib::prelude::*;
 use render::render;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
+use solar_system::build_solar_system;
 use std::hint::black_box;
 use std::thread;
 use std::time::{Duration, Instant};
 use uniforms::Uniforms;
+use world::WorldUpdate;
 
 const WINDOW_WIDTH: i32 = 600;
 const WINDOW_HEIGHT: i32 = 650;
@@ -68,6 +74,7 @@ fn main() {
         camera_target: Vector3::zero(),
     };
     let mut movement = ShipMovement::new(&mesh, rocket_audio.moving_duration());
+    let mut world = build_solar_system();
     movement.update(&InputState::read(&window), 0.0, &mut uniforms);
 
     while !window.window_should_close() {
@@ -75,6 +82,10 @@ fn main() {
         let input = InputState::read(&window);
         let frame_time = window.get_frame_time();
         movement.update(&input, frame_time, &mut uniforms);
+        world.update(&WorldUpdate {
+            frame_time,
+            velocity: movement.world_velocity(),
+        });
         rocket_audio.update(
             input.thrust,
             input.braking,
@@ -83,6 +94,8 @@ fn main() {
             movement.speed_ratio(),
             frame_time,
         );
+
+        world.draw(&mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
         render(

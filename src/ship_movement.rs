@@ -244,6 +244,15 @@ impl ShipMovement {
         (self.speed / self.max_speed).clamp(0.0, 1.0)
     }
 
+    pub fn world_velocity(&self) -> Vector3 {
+        let rotation =
+            Matrix::rotate_xyz(Vector3::new(self.ship_pitch, self.ship_yaw, self.ship_roll));
+        transform_direction(
+            &rotation,
+            Vector3::new(LOCAL_BACKWARD[0], LOCAL_BACKWARD[1], LOCAL_BACKWARD[2]),
+        ) * self.speed
+    }
+
     fn update_camera(&mut self, input: &InputState) {
         self.camera_yaw -= input.orbit_delta.x * ORBIT_SENSITIVITY;
         self.camera_pitch = (self.camera_pitch + input.orbit_delta.y * ORBIT_SENSITIVITY)
