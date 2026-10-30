@@ -5,6 +5,7 @@ mod line;
 mod load_objects;
 mod rasterizer;
 mod render;
+mod rocket_audio;
 mod shaders;
 mod ship_movement;
 mod triangle;
@@ -16,6 +17,7 @@ use input::InputState;
 use rasterizer::{rasterize, TriangleMode};
 use raylib::prelude::*;
 use render::render;
+use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
 use std::hint::black_box;
 use std::thread;
@@ -51,6 +53,8 @@ fn main() {
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title(WINDOW_TITLE)
         .build();
+    let audio = RaylibAudio::init_audio_device().expect("Failed to initialize audio");
+    let mut rocket_audio = RocketAudio::new(&audio);
 
     // Load the 3D object from an .obj file
     let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
@@ -63,13 +67,21 @@ fn main() {
         camera_pos: Vector3::zero(),
         camera_target: Vector3::zero(),
     };
-    let mut movement = ShipMovement::new(&mesh);
+    let mut movement = ShipMovement::new(&mesh, rocket_audio.moving_duration());
     movement.update(&InputState::read(&window), 0.0, &mut uniforms);
 
     while !window.window_should_close() {
         framebuffer.clear();
         let input = InputState::read(&window);
-        movement.update(&input, window.get_frame_time(), &mut uniforms);
+        let frame_time = window.get_frame_time();
+        movement.update(&input, frame_time, &mut uniforms);
+        rocket_audio.update(
+            input.thrust,
+            input.braking,
+            movement.is_moving(),
+            movement.can_accelerate(),
+            frame_time,
+        );
 
         // Render the 3D object to the framebuffer
         render(

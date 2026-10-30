@@ -17,6 +17,11 @@ const ZOOM_SENSITIVITY: f32 = 0.1;
 // Ship movement constants
 const MAX_SHIP_TILT: f32 = 20.0_f32.to_radians();
 const SHIP_TILT_SPEED: f32 = 2.5;
+const MAX_SPEED_FACTOR: f32 = 2.5;
+const MIN_ACCELERATION_DURATION: f32 = 0.1;
+const DECELERATION_FACTOR: f32 = 0.25;
+const BRAKE_DECELERATION_FACTOR: f32 = 2.0;
+const MOVEMENT_THRESHOLD: f32 = 0.01;
 
 // Trail constants
 const TRAIL_CAPACITY: usize = 64;
@@ -32,8 +37,7 @@ const TRAIL_MIN_POINT_RADIUS: i32 = 0;
 const TRAIL_MAX_POINT_RADIUS: i32 = 1;
 const LOCAL_BACKWARD: [f32; 3] = [0.0, 0.0, -1.0];
 
-
-// ROCKET EXHAUST CONSTANTS 
+// ROCKET EXHAUST CONSTANTS
 const EXHAUST_CAPACITY: usize = 1200;
 
 // Lifetimes
@@ -65,14 +69,14 @@ const SPARK_SPREAD: f32 = 0.52;
 const SMOKE_SPREAD: f32 = 0.36;
 
 // Thermal color palette
-const COLOR_CORE_HOT: [f32; 3] = [0.88, 0.96, 1.0]; 
+const COLOR_CORE_HOT: [f32; 3] = [0.88, 0.96, 1.0];
 const COLOR_CORE_WARM: [f32; 3] = [1.0, 0.92, 0.45];
-const COLOR_FLAME_HOT: [f32; 3] = [1.0, 0.82, 0.2]; 
+const COLOR_FLAME_HOT: [f32; 3] = [1.0, 0.82, 0.2];
 const COLOR_FLAME_MID: [f32; 3] = [1.0, 0.36, 0.03];
 const COLOR_FLAME_COOL: [f32; 3] = [0.42, 0.06, 0.01];
-const COLOR_SPARK: [f32; 3] = [1.0, 0.95, 0.65]; 
-const COLOR_SMOKE_START: [f32; 3] = [0.26, 0.24, 0.24]; 
-const COLOR_SMOKE_END: [f32; 3] = [0.65, 0.68, 0.72]; 
+const COLOR_SPARK: [f32; 3] = [1.0, 0.95, 0.65];
+const COLOR_SMOKE_START: [f32; 3] = [0.26, 0.24, 0.24];
+const COLOR_SMOKE_END: [f32; 3] = [0.65, 0.68, 0.72];
 
 // Exhaust visual
 const EXHAUST_BASE_RADIUS: f32 = 4.8;
@@ -82,6 +86,7 @@ const EXHAUST_CLOSE_MAX_RADIUS: i32 = 20;
 const EXHAUST_CLOSE_GROWTH: f32 = 3.0;
 
 pub struct ShipMovement {
+    model_center: Vector3,
     target: Vector3,
     camera_yaw: f32,
     camera_pitch: f32,
@@ -102,6 +107,11 @@ pub struct ShipMovement {
     spark_timer: f32,
     smoke_timer: f32,
     rng_state: u32,
+    speed: f32,
+    max_speed: f32,
+    acceleration: f32,
+    deceleration: f32,
+    brake_deceleration: f32,
 }
 
 struct TrailParticle {
@@ -128,7 +138,7 @@ struct ExhaustParticle {
 }
 
 impl ShipMovement {
-    pub fn new(mesh: &Mesh) -> Self {
+    pub fn new(mesh: &Mesh, acceleration_duration: f32) -> Self {
         let (min, max) = mesh.vertices.iter().fold(
             (
                 Vector3::new(f32::INFINITY, f32::INFINITY, f32::INFINITY),
@@ -172,6 +182,7 @@ impl ShipMovement {
             .unwrap_or(target);
 
         Self {
+            model_center: target,
             target,
             camera_yaw: 0.0,
             camera_pitch: INITIAL_CAMERA_PITCH,
@@ -192,6 +203,12 @@ impl ShipMovement {
             spark_timer: 0.0,
             smoke_timer: 0.0,
             rng_state: 0x8542_5987,
+            speed: 0.0,
+            max_speed: radius * MAX_SPEED_FACTOR,
+            acceleration: radius * MAX_SPEED_FACTOR
+                / acceleration_duration.max(MIN_ACCELERATION_DURATION),
+            deceleration: radius * DECELERATION_FACTOR,
+            brake_deceleration: radius * BRAKE_DECELERATION_FACTOR,
         }
     }
 
@@ -209,9 +226,18 @@ impl ShipMovement {
     pub fn update(&mut self, input: &InputState, frame_time: f32, uniforms: &mut Uniforms) {
         self.update_camera(input);
         self.update_ship(input, frame_time);
+        self.update_motion(input.thrust, input.braking, frame_time);
         self.apply(uniforms);
-        self.update_trail(input.trail, frame_time, uniforms);
-        self.update_exhaust(input.trail, frame_time, uniforms);
+        self.update_trail(self.speed > MOVEMENT_THRESHOLD, frame_time, uniforms);
+        self.update_exhaust(input.thrust && !input.braking, frame_time, uniforms);
+    }
+
+    pub fn is_moving(&self) -> bool {
+        self.speed > MOVEMENT_THRESHOLD
+    }
+
+    pub fn can_accelerate(&self) -> bool {
+        self.speed < self.max_speed - MOVEMENT_THRESHOLD
     }
 
     fn update_camera(&mut self, input: &InputState) {
@@ -245,10 +271,24 @@ impl ShipMovement {
         );
     }
 
+    fn update_motion(&mut self, thrust: bool, braking: bool, frame_time: f32) {
+        if braking {
+            self.speed = (self.speed - self.brake_deceleration * frame_time).max(0.0);
+        } else if thrust {
+            self.speed = (self.speed + self.acceleration * frame_time).min(self.max_speed);
+        } else {
+            self.speed = (self.speed - self.deceleration * frame_time).max(0.0);
+        }
+    }
+
     fn apply(&self, uniforms: &mut Uniforms) {
         uniforms.model_matrix = Matrix::translate(self.target.x, self.target.y, self.target.z)
             * Matrix::rotate_xyz(Vector3::new(self.ship_pitch, self.ship_yaw, self.ship_roll))
-            * Matrix::translate(-self.target.x, -self.target.y, -self.target.z);
+            * Matrix::translate(
+                -self.model_center.x,
+                -self.model_center.y,
+                -self.model_center.z,
+            );
 
         let horizontal_distance = self.camera_distance * self.camera_pitch.cos();
         uniforms.camera_pos = self.target
@@ -282,7 +322,7 @@ impl ShipMovement {
             for (wing, wing_tip) in self.wing_tips.into_iter().enumerate() {
                 self.trail.push(TrailParticle {
                     position: transform_point(&uniforms.model_matrix, wing_tip),
-                    velocity: backward * self.trail_speed,
+                    velocity: backward * (self.trail_speed + self.speed),
                     lifetime: TRAIL_PARTICLE_LIFETIME,
                     wing,
                 });
@@ -377,7 +417,8 @@ impl ShipMovement {
             self.core_timer -= core_interval;
             let jitter_x = self.next_rand_bipolar() * CORE_SPREAD;
             let jitter_y = self.next_rand_bipolar() * CORE_SPREAD;
-            let speed = self.trail_speed * CORE_SPEED_FACTOR * (0.9 + self.next_rand_f32() * 0.2);
+            let speed = self.speed
+                + self.trail_speed * CORE_SPEED_FACTOR * (0.9 + self.next_rand_f32() * 0.2);
             let velocity = backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
@@ -400,7 +441,8 @@ impl ShipMovement {
             self.flame_timer -= flame_interval;
             let jitter_x = self.next_rand_bipolar() * FLAME_SPREAD;
             let jitter_y = self.next_rand_bipolar() * FLAME_SPREAD;
-            let speed = self.trail_speed * FLAME_SPEED_FACTOR * (0.8 + self.next_rand_f32() * 0.4);
+            let speed = self.speed
+                + self.trail_speed * FLAME_SPEED_FACTOR * (0.8 + self.next_rand_f32() * 0.4);
             let velocity = backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
@@ -423,7 +465,8 @@ impl ShipMovement {
             self.spark_timer -= spark_interval;
             let jitter_x = self.next_rand_bipolar() * SPARK_SPREAD;
             let jitter_y = self.next_rand_bipolar() * SPARK_SPREAD;
-            let speed = self.trail_speed * SPARK_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.6);
+            let speed = self.speed
+                + self.trail_speed * SPARK_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.6);
             let velocity = backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
@@ -445,7 +488,8 @@ impl ShipMovement {
             self.smoke_timer -= smoke_interval;
             let jitter_x = self.next_rand_bipolar() * SMOKE_SPREAD;
             let jitter_y = self.next_rand_bipolar() * SMOKE_SPREAD;
-            let speed = self.trail_speed * SMOKE_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.5);
+            let speed = self.speed
+                + self.trail_speed * SMOKE_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.5);
             let offset_x = self.next_rand_bipolar() * nozzle_radius;
             let offset_y = self.next_rand_bipolar() * nozzle_radius;
             let spawn_pos = origin + local_right * offset_x + local_up * offset_y;
