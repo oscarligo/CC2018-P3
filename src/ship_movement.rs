@@ -240,6 +240,10 @@ impl ShipMovement {
         self.speed < self.max_speed - MOVEMENT_THRESHOLD
     }
 
+    pub fn speed_ratio(&self) -> f32 {
+        (self.speed / self.max_speed).clamp(0.0, 1.0)
+    }
+
     fn update_camera(&mut self, input: &InputState) {
         self.camera_yaw -= input.orbit_delta.x * ORBIT_SENSITIVITY;
         self.camera_pitch = (self.camera_pitch + input.orbit_delta.y * ORBIT_SENSITIVITY)

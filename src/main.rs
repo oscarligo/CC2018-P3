@@ -80,6 +80,7 @@ fn main() {
             input.braking,
             movement.is_moving(),
             movement.can_accelerate(),
+            movement.speed_ratio(),
             frame_time,
         );
 

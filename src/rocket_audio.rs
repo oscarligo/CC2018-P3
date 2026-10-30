@@ -33,7 +33,6 @@ pub struct RocketAudio<'audio> {
     moving_music: Music<'audio>,
     moving_volume: f32,
     moving_was_active: bool,
-    moving_resume_position: f32,
     moving_completed: bool,
     moving_duration: f32,
     flying_music: Music<'audio>,
@@ -78,7 +77,6 @@ impl<'audio> RocketAudio<'audio> {
             moving_music,
             moving_volume: 0.0,
             moving_was_active: false,
-            moving_resume_position: 0.0,
             moving_completed: false,
             moving_duration,
             flying_music,
@@ -96,6 +94,7 @@ impl<'audio> RocketAudio<'audio> {
         braking: bool,
         moving: bool,
         can_accelerate: bool,
+        speed_ratio: f32,
         frame_time: f32,
     ) {
         update_loop(
@@ -134,29 +133,33 @@ impl<'audio> RocketAudio<'audio> {
             FLYING_FADE_OUT_SPEED,
             frame_time,
         );
-        self.update_moving(thrust && !braking, can_accelerate, frame_time);
+        self.update_moving(
+            thrust && !braking,
+            can_accelerate,
+            speed_ratio,
+            frame_time,
+        );
     }
 
-    fn update_moving(&mut self, thrust: bool, can_accelerate: bool, frame_time: f32) {
+    fn update_moving(
+        &mut self,
+        thrust: bool,
+        can_accelerate: bool,
+        speed_ratio: f32,
+        frame_time: f32,
+    ) {
         if thrust && can_accelerate && !self.moving_was_active {
-            if self.moving_completed {
-                self.moving_resume_position = 0.0;
-                self.moving_completed = false;
-            }
+            let resume_position = self.moving_duration * speed_ratio.clamp(0.0, 1.0);
+            self.moving_completed = false;
             self.moving_music.stop_stream();
-            self.moving_music.seek_stream(self.moving_resume_position);
+            self.moving_music.seek_stream(resume_position);
             self.moving_music.play_stream();
-        }
-
-        if !thrust && self.moving_was_active && self.moving_music.is_stream_playing() {
-            self.moving_resume_position = self.moving_music.get_time_played();
         }
 
         if self.moving_music.is_stream_playing() {
             self.moving_music.update_stream();
         } else if thrust && self.moving_was_active {
             self.moving_completed = true;
-            self.moving_resume_position = self.moving_duration;
         }
 
         let end_envelope = if thrust && self.moving_music.is_stream_playing() {
