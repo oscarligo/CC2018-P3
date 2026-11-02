@@ -1,13 +1,10 @@
 use crate::fragment::Fragment;
 use crate::framebuffer::Framebuffer;
-use crate::load_objects::{project_vertex, Mesh};
-use crate::rasterizer::{rasterize_indexed, TriangleMode};
+use crate::load_objects::{Mesh, project_vertex};
+use crate::rasterizer::{TriangleMode, rasterize_indexed};
 use crate::shaders::{fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
-
-// Render constants
-const PROJECTION_SCALE: f32 = 90.0;
 
 pub fn render(
     framebuffer: &mut Framebuffer,
@@ -28,7 +25,7 @@ pub fn render(
             transformed.transformed_position,
             uniforms.camera_pos,
             uniforms.camera_target,
-            PROJECTION_SCALE,
+            uniforms.camera_up,
             width,
             height,
         ) {
@@ -41,7 +38,14 @@ pub fn render(
     }));
 
     // 2. Primitive assembly and rasterization
-    rasterize_indexed(transformed_vertices, &mesh.indices, mode, fragments);
+    rasterize_indexed(
+        transformed_vertices,
+        &mesh.indices,
+        mode,
+        framebuffer.width,
+        framebuffer.height,
+        fragments,
+    );
 
     // 3. Fragment Processing
     for fragment in fragments.iter() {

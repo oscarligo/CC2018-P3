@@ -1,15 +1,20 @@
 use raylib::prelude::*;
 
-const PITCH_UP_KEY: KeyboardKey = KeyboardKey::KEY_W;
-const PITCH_DOWN_KEY: KeyboardKey = KeyboardKey::KEY_S;
-const TURN_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_L;
-const TURN_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_J;
-const BANK_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_A;
-const BANK_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_D;
+// Propulsión estilo No Man's Sky
 const THRUST_KEY: KeyboardKey = KeyboardKey::KEY_SPACE;
-const BRAKE_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_LEFT_SHIFT;
-const BRAKE_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_RIGHT_SHIFT;
-const ORBIT_BUTTON: MouseButton = MouseButton::MOUSE_BUTTON_LEFT;
+const BRAKE_KEY: KeyboardKey = KeyboardKey::KEY_LEFT_SHIFT;
+
+// Alabeo (Roll) en Q/E
+const ROLL_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_Q;
+const ROLL_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_E;
+
+// Dirección por teclado
+const PITCH_UP_KEY: KeyboardKey = KeyboardKey::KEY_S;
+const PITCH_DOWN_KEY: KeyboardKey = KeyboardKey::KEY_W;
+const TURN_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_A;
+const TURN_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_D;
+
+const ORBIT_BUTTON: MouseButton = MouseButton::MOUSE_BUTTON_RIGHT;
 
 pub struct InputState {
     pub pitch_up: bool,
@@ -19,30 +24,32 @@ pub struct InputState {
     pub bank_left: bool,
     pub bank_right: bool,
     pub thrust: bool,
+    pub boost: bool,
     pub braking: bool,
-    pub orbit_delta: Vector2,
+    pub mouse_delta: Vector2,
+    pub orbiting: bool,
     pub zoom_delta: f32,
 }
 
 impl InputState {
     pub fn read(window: &RaylibHandle) -> Self {
-        let orbit_delta = if window.is_mouse_button_down(ORBIT_BUTTON) {
-            window.get_mouse_delta()
-        } else {
-            Vector2::zero()
-        };
+        let boost = window.is_key_down(THRUST_KEY);
+        let thrust = window.is_key_down(THRUST_KEY) || boost;
+        let braking = window.is_key_down(BRAKE_KEY);
+        let orbiting = window.is_mouse_button_down(ORBIT_BUTTON);
 
-        let braking = window.is_key_down(BRAKE_LEFT_KEY) || window.is_key_down(BRAKE_RIGHT_KEY);
         Self {
             pitch_up: window.is_key_down(PITCH_UP_KEY),
-            pitch_down: window.is_key_down(PITCH_DOWN_KEY) || braking,
+            pitch_down: window.is_key_down(PITCH_DOWN_KEY),
             turn_left: window.is_key_down(TURN_LEFT_KEY),
             turn_right: window.is_key_down(TURN_RIGHT_KEY),
-            bank_left: window.is_key_down(BANK_LEFT_KEY),
-            bank_right: window.is_key_down(BANK_RIGHT_KEY),
-            thrust: window.is_key_down(THRUST_KEY),
+            bank_left: window.is_key_down(ROLL_LEFT_KEY),
+            bank_right: window.is_key_down(ROLL_RIGHT_KEY),
+            thrust,
+            boost,
             braking,
-            orbit_delta,
+            mouse_delta: window.get_mouse_delta(),
+            orbiting,
             zoom_delta: window.get_mouse_wheel_move(),
         }
     }

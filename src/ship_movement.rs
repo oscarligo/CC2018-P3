@@ -1,40 +1,55 @@
 use crate::framebuffer::Framebuffer;
 use crate::input::InputState;
-use crate::load_objects::{project_vertex, Mesh};
+use crate::load_objects::{Mesh, project_vertex};
 use crate::uniforms::Uniforms;
 use raylib::prelude::*;
 
-// Camera constants
-const INITIAL_CAMERA_PITCH: f32 = 0.2;
-const INITIAL_CAMERA_DISTANCE_FACTOR: f32 = 2.5;
-const MIN_CAMERA_DISTANCE_FACTOR: f32 = 1.0;
+// Camera constants 
+const INITIAL_CAMERA_DISTANCE_FACTOR: f32 = 2.6;
+const MIN_CAMERA_DISTANCE_FACTOR: f32 = 1.2;
 const MAX_CAMERA_DISTANCE_FACTOR: f32 = 8.0;
-const ORBIT_SENSITIVITY: f32 = 0.01;
-const MIN_CAMERA_PITCH: f32 = -1.5;
-const MAX_CAMERA_PITCH: f32 = 1.5;
 const ZOOM_SENSITIVITY: f32 = 0.1;
+const CAMERA_HEIGHT_FACTOR: f32 = 0.25;
+const CAMERA_FOLLOW_STIFFNESS: f32 = 6.5;
+const CAMERA_THRUST_PULLBACK: f32 = 1.12;
+const CAMERA_BOOST_PULLBACK: f32 = 1.42;
+const CAMERA_BRAKE_PUSHIN: f32 = 0.85;
+const CAMERA_ORBIT_SENSITIVITY: f32 = 0.008;
+const MAX_CAMERA_ORBIT_PITCH: f32 = 80.0_f32.to_radians();
+const CAMERA_RETURN_DELAY: f32 = 1.2;
+const CAMERA_RETURN_SPEED: f32 = 2.5;
+const CAMERA_ALIGNMENT_EPSILON: f32 = 0.001;
 
-// Ship movement constants
-const MAX_SHIP_TILT: f32 = 20.0_f32.to_radians();
-const SHIP_TILT_SPEED: f32 = 2.5;
-const MAX_SPEED_FACTOR: f32 = 2.5;
+// Flight constants
+const MAX_SHIP_PITCH_TILT: f32 = 16.0_f32.to_radians();
+const MAX_SHIP_YAW_TILT: f32 = 14.0_f32.to_radians();
+const AUTO_BANK_MAX_ANGLE: f32 = 32.0_f32.to_radians();
+const MANUAL_ROLL_MAX_ANGLE: f32 = 55.0_f32.to_radians();
+const SHIP_TILT_SMOOTHING: f32 = 6.5;
+const STEER_ANGULAR_ACCEL: f32 = 7.0;
+const NAVIGATION_TURN_SPEED: f32 = 1.35;
+
+// Speed & Throttle constants 
+const EXHAUST_SPEED_REFERENCE_RATIO: f32 = 0.45;
+const MAX_SPEED_FACTOR: f32 = 2.8;
+const BOOST_SPEED_MULTIPLIER: f32 = 2.2;
 const MIN_ACCELERATION_DURATION: f32 = 0.1;
-const DECELERATION_FACTOR: f32 = 0.25;
-const BRAKE_DECELERATION_FACTOR: f32 = 2.0;
+const SPACE_DRAG_DECEL_FACTOR: f32 = 0.45;
+const BRAKE_DECEL_FACTOR: f32 = 2.4;
 const MOVEMENT_THRESHOLD: f32 = 0.01;
 
 // Trail constants
 const TRAIL_CAPACITY: usize = 64;
 const TRAIL_SPEED_FACTOR: f32 = 2.0;
-const TRAIL_PARTICLE_LIFETIME: f32 = 0.3;
+const TRAIL_PARTICLE_LIFETIME: f32 = 0.5;
 const TRAIL_EMISSION_INTERVAL: f32 = 1.0 / 30.0;
-const TRAIL_PROJECTION_SCALE: f32 = 90.0;
 
 // Trail visual
-const TRAIL_COLOR: [f32; 3] = [0.8, 0.8, 0.8];
+const TRAIL_COLOR: [f32; 3] = [0.85, 0.92, 1.0];
 const TRAIL_POINT_RADIUS: i32 = 0;
-const TRAIL_MIN_POINT_RADIUS: i32 = 0;
+const TRAIL_MIN_POINT_RADIUS: i32 = 1;
 const TRAIL_MAX_POINT_RADIUS: i32 = 1;
+const LOCAL_FORWARD: [f32; 3] = [0.0, 0.0, 1.0];
 const LOCAL_BACKWARD: [f32; 3] = [0.0, 0.0, -1.0];
 
 // ROCKET EXHAUST CONSTANTS
@@ -88,14 +103,20 @@ const EXHAUST_CLOSE_GROWTH: f32 = 3.0;
 pub struct ShipMovement {
     model_center: Vector3,
     target: Vector3,
-    camera_yaw: f32,
-    camera_pitch: f32,
     camera_distance: f32,
+    effective_camera_distance: f32,
     min_distance: f32,
     max_distance: f32,
+    camera_orbit_pitch: f32,
+    camera_orbit_yaw: f32,
+    camera_return_timer: f32,
+    camera_orientation: Quaternion,
     ship_pitch: f32,
     ship_yaw: f32,
     ship_roll: f32,
+    pitch_rate: f32,
+    yaw_rate: f32,
+    orientation: Quaternion,
     wing_tips: [Vector3; 2],
     trail: Vec<TrailParticle>,
     trail_speed: f32,
@@ -181,17 +202,26 @@ impl ShipMovement {
             .map(|vertex| vertex.position)
             .unwrap_or(target);
 
+        let initial_cam_dist = radius * INITIAL_CAMERA_DISTANCE_FACTOR;
+        let max_speed = radius * MAX_SPEED_FACTOR;
+
         Self {
             model_center: target,
             target,
-            camera_yaw: 0.0,
-            camera_pitch: INITIAL_CAMERA_PITCH,
-            camera_distance: radius * INITIAL_CAMERA_DISTANCE_FACTOR,
+            camera_distance: initial_cam_dist,
+            effective_camera_distance: initial_cam_dist,
             min_distance: radius * MIN_CAMERA_DISTANCE_FACTOR,
             max_distance: radius * MAX_CAMERA_DISTANCE_FACTOR,
+            camera_orbit_pitch: 0.0,
+            camera_orbit_yaw: 0.0,
+            camera_return_timer: 0.0,
+            camera_orientation: Quaternion::identity(),
             ship_pitch: 0.0,
             ship_yaw: 0.0,
             ship_roll: 0.0,
+            pitch_rate: 0.0,
+            yaw_rate: 0.0,
+            orientation: Quaternion::identity(),
             wing_tips: [left_wing, right_wing],
             trail: Vec::with_capacity(TRAIL_CAPACITY),
             trail_speed: radius * TRAIL_SPEED_FACTOR,
@@ -204,11 +234,10 @@ impl ShipMovement {
             smoke_timer: 0.0,
             rng_state: 0x8542_5987,
             speed: 0.0,
-            max_speed: radius * MAX_SPEED_FACTOR,
-            acceleration: radius * MAX_SPEED_FACTOR
-                / acceleration_duration.max(MIN_ACCELERATION_DURATION),
-            deceleration: radius * DECELERATION_FACTOR,
-            brake_deceleration: radius * BRAKE_DECELERATION_FACTOR,
+            max_speed,
+            acceleration: max_speed / acceleration_duration.max(MIN_ACCELERATION_DURATION),
+            deceleration: max_speed * SPACE_DRAG_DECEL_FACTOR,
+            brake_deceleration: max_speed * BRAKE_DECEL_FACTOR,
         }
     }
 
@@ -224,11 +253,20 @@ impl ShipMovement {
     }
 
     pub fn update(&mut self, input: &InputState, frame_time: f32, uniforms: &mut Uniforms) {
-        self.update_camera(input);
+        self.update_navigation(input, frame_time);
         self.update_ship(input, frame_time);
-        self.update_motion(input.thrust, input.braking, frame_time);
+        self.update_motion(input.thrust, input.boost, input.braking, frame_time);
+        self.target += self.world_velocity() * frame_time;
+        self.update_camera(input, frame_time);
         self.apply(uniforms);
-        self.update_trail(self.speed > MOVEMENT_THRESHOLD, frame_time, uniforms);
+
+        let show_wing_trails =
+            input.boost || (self.speed > self.max_speed * 0.5 && self.yaw_rate.abs() > 0.35);
+        self.update_trail(
+            show_wing_trails && self.speed > MOVEMENT_THRESHOLD,
+            frame_time,
+            uniforms,
+        );
         self.update_exhaust(input.thrust && !input.braking, frame_time, uniforms);
     }
 
@@ -237,80 +275,153 @@ impl ShipMovement {
     }
 
     pub fn can_accelerate(&self) -> bool {
-        self.speed < self.max_speed - MOVEMENT_THRESHOLD
+        self.speed < self.max_speed * BOOST_SPEED_MULTIPLIER - MOVEMENT_THRESHOLD
     }
 
     pub fn speed_ratio(&self) -> f32 {
-        (self.speed / self.max_speed).clamp(0.0, 1.0)
+        (self.speed / self.max_speed).clamp(0.0, BOOST_SPEED_MULTIPLIER)
     }
 
-    pub fn world_velocity(&self) -> Vector3 {
-        let rotation =
-            Matrix::rotate_xyz(Vector3::new(self.ship_pitch, self.ship_yaw, self.ship_roll));
+    fn world_velocity(&self) -> Vector3 {
         transform_direction(
-            &rotation,
-            Vector3::new(LOCAL_BACKWARD[0], LOCAL_BACKWARD[1], LOCAL_BACKWARD[2]),
+            &self.orientation.to_matrix(),
+            Vector3::new(LOCAL_FORWARD[0], LOCAL_FORWARD[1], LOCAL_FORWARD[2]),
         ) * self.speed
     }
 
-    fn update_camera(&mut self, input: &InputState) {
-        self.camera_yaw -= input.orbit_delta.x * ORBIT_SENSITIVITY;
-        self.camera_pitch = (self.camera_pitch + input.orbit_delta.y * ORBIT_SENSITIVITY)
-            .clamp(MIN_CAMERA_PITCH, MAX_CAMERA_PITCH);
-        if input.zoom_delta != 0.0 {
-            self.camera_distance = (self.camera_distance
-                * (1.0 - input.zoom_delta * ZOOM_SENSITIVITY))
-                .clamp(self.min_distance, self.max_distance);
-        }
+    fn update_navigation(&mut self, input: &InputState, frame_time: f32) {
+        let target_pitch = axis_value(input.pitch_down, input.pitch_up);
+        let target_yaw = axis_value(input.turn_right, input.turn_left);
+
+        let roll_turn_assist = axis_value(input.bank_right, input.bank_left) * 0.45;
+
+        let blend = (STEER_ANGULAR_ACCEL * frame_time).min(1.0);
+        self.pitch_rate += (target_pitch - self.pitch_rate) * blend;
+        self.yaw_rate += ((target_yaw + roll_turn_assist) - self.yaw_rate) * blend;
+
+        let pitch = Quaternion::from_axis_angle(
+            Vector3::new(1.0, 0.0, 0.0),
+            self.pitch_rate * NAVIGATION_TURN_SPEED * frame_time,
+        );
+        let yaw = Quaternion::from_axis_angle(
+            Vector3::new(0.0, 1.0, 0.0),
+            self.yaw_rate * NAVIGATION_TURN_SPEED * frame_time,
+        );
+        // Los giros son locales a la nave, incluso durante vuelo vertical o invertido.
+        self.orientation = (self.orientation * yaw * pitch).normalize();
     }
 
     fn update_ship(&mut self, input: &InputState, frame_time: f32) {
-        let step = SHIP_TILT_SPEED * frame_time;
+        let smooth = (SHIP_TILT_SMOOTHING * frame_time).min(1.0);
 
-        self.ship_pitch = move_towards(
-            self.ship_pitch,
-            axis_target(input.pitch_up, input.pitch_down, MAX_SHIP_TILT),
-            step,
-        );
-        self.ship_yaw = move_towards(
-            self.ship_yaw,
-            axis_target(input.turn_left, input.turn_right, MAX_SHIP_TILT),
-            step,
-        );
-        self.ship_roll = move_towards(
-            self.ship_roll,
-            axis_target(input.bank_left, input.bank_right, MAX_SHIP_TILT),
-            step,
-        );
+        let target_pitch = (self.pitch_rate * MAX_SHIP_PITCH_TILT)
+            .clamp(-MAX_SHIP_PITCH_TILT, MAX_SHIP_PITCH_TILT);
+        let target_yaw =
+            (self.yaw_rate * MAX_SHIP_YAW_TILT).clamp(-MAX_SHIP_YAW_TILT, MAX_SHIP_YAW_TILT);
+
+        // Alabeo automático al girar y manual con Q/E; se nivela al soltar.
+        let auto_bank = -self.yaw_rate * AUTO_BANK_MAX_ANGLE;
+        let manual_roll = axis_value(input.bank_left, input.bank_right) * MANUAL_ROLL_MAX_ANGLE;
+        let target_roll = (auto_bank + manual_roll).clamp(-1.25, 1.25);
+
+        self.ship_pitch += (target_pitch - self.ship_pitch) * smooth;
+        self.ship_yaw += (target_yaw - self.ship_yaw) * smooth;
+        self.ship_roll += (target_roll - self.ship_roll) * smooth;
     }
 
-    fn update_motion(&mut self, thrust: bool, braking: bool, frame_time: f32) {
+    fn update_motion(&mut self, thrust: bool, boost: bool, braking: bool, frame_time: f32) {
         if braking {
             self.speed = (self.speed - self.brake_deceleration * frame_time).max(0.0);
+        } else if boost {
+            let target_max = self.max_speed * BOOST_SPEED_MULTIPLIER;
+            self.speed = move_towards(self.speed, target_max, self.acceleration * 2.2 * frame_time);
         } else if thrust {
-            self.speed = (self.speed + self.acceleration * frame_time).min(self.max_speed);
+            self.speed = move_towards(self.speed, self.max_speed, self.acceleration * frame_time);
         } else {
             self.speed = (self.speed - self.deceleration * frame_time).max(0.0);
         }
     }
 
+    fn update_camera(&mut self, input: &InputState, frame_time: f32) {
+        if input.zoom_delta != 0.0 {
+            self.camera_distance = (self.camera_distance
+                * (1.0 - input.zoom_delta * ZOOM_SENSITIVITY))
+                .clamp(self.min_distance, self.max_distance);
+        }
+
+        let distance_mult = if input.braking {
+            CAMERA_BRAKE_PUSHIN
+        } else if input.boost {
+            CAMERA_BOOST_PULLBACK
+        } else if input.thrust {
+            CAMERA_THRUST_PULLBACK
+        } else {
+            1.0
+        };
+        let desired_distance = (self.camera_distance * distance_mult)
+            .clamp(self.min_distance * 0.85, self.max_distance * 1.3);
+        self.effective_camera_distance +=
+            (desired_distance - self.effective_camera_distance) * (5.0 * frame_time).min(1.0);
+
+        let follow_blend = (CAMERA_FOLLOW_STIFFNESS * frame_time).min(1.0);
+        self.camera_orientation = self
+            .camera_orientation
+            .slerp(self.orientation, follow_blend)
+            .normalize();
+
+        if input.orbiting {
+            self.camera_orbit_yaw -= input.mouse_delta.x * CAMERA_ORBIT_SENSITIVITY;
+            self.camera_orbit_yaw = self
+                .camera_orbit_yaw
+                .sin()
+                .atan2(self.camera_orbit_yaw.cos());
+            self.camera_orbit_pitch = (self.camera_orbit_pitch
+                + input.mouse_delta.y * CAMERA_ORBIT_SENSITIVITY)
+                .clamp(-MAX_CAMERA_ORBIT_PITCH, MAX_CAMERA_ORBIT_PITCH);
+            self.camera_return_timer = CAMERA_RETURN_DELAY;
+        } else if !self.camera_is_aligned() {
+            self.camera_return_timer = (self.camera_return_timer - frame_time).max(0.0);
+            if self.camera_return_timer == 0.0 {
+                let step = CAMERA_RETURN_SPEED * frame_time;
+                self.camera_orbit_pitch = move_towards(self.camera_orbit_pitch, 0.0, step);
+                self.camera_orbit_yaw = move_towards(self.camera_orbit_yaw, 0.0, step);
+            }
+        }
+    }
+
+    fn camera_is_aligned(&self) -> bool {
+        self.camera_orbit_pitch.abs() <= CAMERA_ALIGNMENT_EPSILON
+            && self.camera_orbit_yaw.abs() <= CAMERA_ALIGNMENT_EPSILON
+    }
+
     fn apply(&self, uniforms: &mut Uniforms) {
-        uniforms.model_matrix = Matrix::translate(self.target.x, self.target.y, self.target.z)
-            * Matrix::rotate_xyz(Vector3::new(self.ship_pitch, self.ship_yaw, self.ship_roll))
-            * Matrix::translate(
-                -self.model_center.x,
-                -self.model_center.y,
-                -self.model_center.z,
+        let ship_direction = self.orientation.to_matrix();
+        let local_attitude = Matrix::rotate_y(self.ship_yaw)
+            * Matrix::rotate_x(self.ship_pitch)
+            * Matrix::rotate_z(self.ship_roll);
+
+        // Raylib aplica los factores de izquierda a derecha: centrar, rotar y trasladar.
+        uniforms.model_matrix = Matrix::translate(
+            -self.model_center.x,
+            -self.model_center.y,
+            -self.model_center.z,
+        ) * local_attitude
+            * ship_direction
+            * Matrix::translate(self.target.x, self.target.y, self.target.z);
+
+        let camera_rotation = Matrix::rotate_x(self.camera_orbit_pitch)
+            * Matrix::rotate_y(self.camera_orbit_yaw)
+            * self.camera_orientation.to_matrix();
+
+        let dist = self.effective_camera_distance;
+        uniforms.camera_pos = self.target
+            + transform_direction(
+                &camera_rotation,
+                Vector3::new(0.0, dist * CAMERA_HEIGHT_FACTOR, -dist),
             );
 
-        let horizontal_distance = self.camera_distance * self.camera_pitch.cos();
-        uniforms.camera_pos = self.target
-            + Vector3::new(
-                horizontal_distance * self.camera_yaw.sin(),
-                self.camera_distance * self.camera_pitch.sin(),
-                -horizontal_distance * self.camera_yaw.cos(),
-            );
         uniforms.camera_target = self.target;
+        uniforms.camera_up = transform_direction(&camera_rotation, Vector3::new(0.0, 1.0, 0.0));
     }
 
     fn update_trail(&mut self, emitting: bool, frame_time: f32, uniforms: &Uniforms) {
@@ -326,6 +437,7 @@ impl ShipMovement {
         }
 
         self.emission_timer += frame_time;
+        let ship_velocity = self.world_velocity();
         while self.emission_timer >= TRAIL_EMISSION_INTERVAL {
             self.emission_timer -= TRAIL_EMISSION_INTERVAL;
             let backward = transform_direction(
@@ -335,7 +447,7 @@ impl ShipMovement {
             for (wing, wing_tip) in self.wing_tips.into_iter().enumerate() {
                 self.trail.push(TrailParticle {
                     position: transform_point(&uniforms.model_matrix, wing_tip),
-                    velocity: backward * (self.trail_speed + self.speed),
+                    velocity: ship_velocity + backward * self.trail_speed,
                     lifetime: TRAIL_PARTICLE_LIFETIME,
                     wing,
                 });
@@ -345,7 +457,7 @@ impl ShipMovement {
 
     pub fn draw_trail(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
         let point_radius = scaled_trail_radius(
-            self.camera_distance,
+            self.effective_camera_distance,
             self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR,
         );
         let mut previous = [None, None];
@@ -354,7 +466,7 @@ impl ShipMovement {
                 particle.position,
                 uniforms.camera_pos,
                 uniforms.camera_target,
-                TRAIL_PROJECTION_SCALE,
+                uniforms.camera_up,
                 framebuffer.width as f32,
                 framebuffer.height as f32,
             ) else {
@@ -397,10 +509,12 @@ impl ShipMovement {
             return;
         }
 
-        self.core_timer = (self.core_timer + frame_time).min(0.2);
-        self.flame_timer = (self.flame_timer + frame_time).min(0.2);
-        self.spark_timer = (self.spark_timer + frame_time).min(0.2);
-        self.smoke_timer = (self.smoke_timer + frame_time).min(0.2);
+        let thrust_power = (self.speed_ratio() / EXHAUST_SPEED_REFERENCE_RATIO).clamp(0.5, 2.5);
+
+        self.core_timer = (self.core_timer + frame_time * thrust_power).min(0.2);
+        self.flame_timer = (self.flame_timer + frame_time * thrust_power).min(0.2);
+        self.spark_timer = (self.spark_timer + frame_time * thrust_power).min(0.2);
+        self.smoke_timer = (self.smoke_timer + frame_time * thrust_power).min(0.2);
 
         let origin = transform_point(&uniforms.model_matrix, self.rear_point);
         let backward = transform_direction(
@@ -409,12 +523,13 @@ impl ShipMovement {
         );
         let local_right = transform_direction(&uniforms.model_matrix, Vector3::new(1.0, 0.0, 0.0));
         let local_up = transform_direction(&uniforms.model_matrix, Vector3::new(0.0, 1.0, 0.0));
+        let ship_velocity = self.world_velocity();
 
         let ship_radius = self.trail_speed / TRAIL_SPEED_FACTOR;
         let nozzle_radius = ship_radius * 0.085;
 
         let reference_distance = self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR;
-        let zoom_ratio = reference_distance / self.camera_distance.max(0.001);
+        let zoom_ratio = reference_distance / self.effective_camera_distance.max(0.001);
         let emission_density = if zoom_ratio > 1.0 {
             (zoom_ratio * zoom_ratio * EXHAUST_CLOSE_DENSITY_BOOST).min(EXHAUST_CLOSE_MAX_DENSITY)
         } else {
@@ -430,9 +545,9 @@ impl ShipMovement {
             self.core_timer -= core_interval;
             let jitter_x = self.next_rand_bipolar() * CORE_SPREAD;
             let jitter_y = self.next_rand_bipolar() * CORE_SPREAD;
-            let speed = self.speed
-                + self.trail_speed * CORE_SPEED_FACTOR * (0.9 + self.next_rand_f32() * 0.2);
-            let velocity = backward * speed
+            let speed = self.trail_speed * CORE_SPEED_FACTOR * (0.9 + self.next_rand_f32() * 0.2);
+            let velocity = ship_velocity
+                + backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
             let sub_step = self.next_rand_f32() * frame_time * 0.5;
@@ -454,9 +569,9 @@ impl ShipMovement {
             self.flame_timer -= flame_interval;
             let jitter_x = self.next_rand_bipolar() * FLAME_SPREAD;
             let jitter_y = self.next_rand_bipolar() * FLAME_SPREAD;
-            let speed = self.speed
-                + self.trail_speed * FLAME_SPEED_FACTOR * (0.8 + self.next_rand_f32() * 0.4);
-            let velocity = backward * speed
+            let speed = self.trail_speed * FLAME_SPEED_FACTOR * (0.8 + self.next_rand_f32() * 0.4);
+            let velocity = ship_velocity
+                + backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
             let sub_step = self.next_rand_f32() * frame_time * 0.5;
@@ -478,9 +593,9 @@ impl ShipMovement {
             self.spark_timer -= spark_interval;
             let jitter_x = self.next_rand_bipolar() * SPARK_SPREAD;
             let jitter_y = self.next_rand_bipolar() * SPARK_SPREAD;
-            let speed = self.speed
-                + self.trail_speed * SPARK_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.6);
-            let velocity = backward * speed
+            let speed = self.trail_speed * SPARK_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.6);
+            let velocity = ship_velocity
+                + backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed);
             let offset_x = self.next_rand_bipolar() * nozzle_radius * 0.5;
@@ -501,12 +616,12 @@ impl ShipMovement {
             self.smoke_timer -= smoke_interval;
             let jitter_x = self.next_rand_bipolar() * SMOKE_SPREAD;
             let jitter_y = self.next_rand_bipolar() * SMOKE_SPREAD;
-            let speed = self.speed
-                + self.trail_speed * SMOKE_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.5);
+            let speed = self.trail_speed * SMOKE_SPEED_FACTOR * (0.7 + self.next_rand_f32() * 0.5);
             let offset_x = self.next_rand_bipolar() * nozzle_radius;
             let offset_y = self.next_rand_bipolar() * nozzle_radius;
             let spawn_pos = origin + local_right * offset_x + local_up * offset_y;
-            let velocity = backward * speed
+            let velocity = ship_velocity
+                + backward * speed
                 + local_right * (jitter_x * self.trail_speed)
                 + local_up * (jitter_y * self.trail_speed)
                 + Vector3::new(0.0, self.trail_speed * SMOKE_RISE_FACTOR, 0.0);
@@ -529,7 +644,7 @@ impl ShipMovement {
                 particle.position,
                 uniforms.camera_pos,
                 uniforms.camera_target,
-                TRAIL_PROJECTION_SCALE,
+                uniforms.camera_up,
                 framebuffer.width as f32,
                 framebuffer.height as f32,
             ) else {
@@ -539,16 +654,13 @@ impl ShipMovement {
             let dist_to_cam = (particle.position - uniforms.camera_pos).length().max(0.1);
             let raw_scale = reference_distance / dist_to_cam;
 
-            // t = 1.0 (pegado al origen/tobera), t = 0.0 (lejos del origen/extinguiéndose)
             let t = (particle.lifetime / particle.max_lifetime).clamp(0.0, 1.0);
-            // Boost concentrado en el origen (salida de la tobera)
             let origin_boost = t * t * t;
 
             let (color, radius_mult) = match particle.kind {
                 ExhaustKind::Core => {
                     let base_col = lerp_color(COLOR_CORE_WARM, COLOR_CORE_HOT, t);
                     let intensity = 0.85 + 0.15 * t;
-                    // Grande en el origen (t=1.0), se afila a chispa pequeña al salir
                     (base_col * intensity, 0.65 + origin_boost * 1.15)
                 }
                 ExhaustKind::Flame => {
@@ -558,7 +670,6 @@ impl ShipMovement {
                         lerp_color(COLOR_FLAME_COOL, COLOR_FLAME_MID, t * 2.0)
                     };
                     let intensity = (t * 1.35).min(1.0);
-                    // Muy prominente al salir del origen y se encoge como chispas al alejarse
                     (base_col * intensity, 0.55 + t * 0.65 + origin_boost * 0.95)
                 }
                 ExhaustKind::Spark => {
@@ -664,6 +775,10 @@ fn axis_target(positive: bool, negative: bool, amount: f32) -> f32 {
         (false, true) => -amount,
         _ => 0.0,
     }
+}
+
+fn axis_value(positive: bool, negative: bool) -> f32 {
+    axis_target(positive, negative, 1.0)
 }
 
 fn move_towards(current: f32, target: f32, max_delta: f32) -> f32 {

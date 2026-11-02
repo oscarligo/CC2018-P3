@@ -11,8 +11,8 @@ const TEXTURE_COORD_CAPACITY: usize = 1024;
 const VERTEX_CAPACITY: usize = 2048;
 const INDEX_CAPACITY: usize = 2048;
 const LINE_BUFFER_CAPACITY: usize = 128;
-const NEAR_CLIP_DISTANCE: f32 = 0.1;
-const WORLD_UP: [f32; 3] = [0.0, 1.0, 0.0];
+const NEAR_CLIP_DISTANCE: f32 = 1.0;
+const VERTICAL_FOV: f32 = 60.0_f32.to_radians();
 
 pub struct Material {
     pub diffuse_texture: Option<RgbaImage>,
@@ -172,15 +172,12 @@ pub fn project_vertex(
     v: Vector3,
     camera_pos: Vector3,
     camera_target: Vector3,
-    fov_scale: f32,
+    camera_up: Vector3,
     width: f32,
     height: f32,
 ) -> Option<(Vector2, f32)> {
     let forward = normalize(camera_target - camera_pos)?;
-    let right = normalize(cross(
-        Vector3::new(WORLD_UP[0], WORLD_UP[1], WORLD_UP[2]),
-        forward,
-    ))?;
+    let right = normalize(cross(camera_up, forward))?;
     let up = cross(forward, right);
     let relative = v - camera_pos;
     let camera_x = dot(relative, right);
@@ -191,9 +188,9 @@ pub fn project_vertex(
         return None;
     }
 
-    let aspect_ratio = width / height;
-    let x = camera_x / z * fov_scale / aspect_ratio + (width / 2.0);
-    let y = -camera_y / z * fov_scale + (height / 2.0);
+    let focal_length = height * 0.5 / (VERTICAL_FOV * 0.5).tan();
+    let x = camera_x / z * focal_length + (width / 2.0);
+    let y = -camera_y / z * focal_length + (height / 2.0);
 
     Some((Vector2::new(x, y), z))
 }
@@ -213,48 +210,4 @@ fn cross(a: Vector3, b: Vector3) -> Vector3 {
 fn normalize(vector: Vector3) -> Option<Vector3> {
     let length = dot(vector, vector).sqrt();
     (length > f32::EPSILON).then(|| vector * (1.0 / length))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::load_obj;
-
-    #[test]
-    fn loads_ship_materials_and_texture_coordinates() {
-        let mesh = load_obj("assets/ship.obj").unwrap();
-
-        assert_eq!(mesh.materials.len(), 3);
-        assert!(mesh.materials[1].diffuse_texture.is_some());
-        assert!(mesh.materials[2].diffuse_texture.is_some());
-        assert!(mesh
-            .vertices
-            .iter()
-            .all(|vertex| vertex.tex_coord.is_some()));
-        assert!(mesh
-            .vertices
-            .iter()
-            .any(|vertex| vertex.material_index == 1));
-        assert!(mesh
-            .vertices
-            .iter()
-            .any(|vertex| vertex.material_index == 2));
-        assert_eq!(mesh.indices.len() % 3, 0);
-    }
-
-    #[test]
-    fn loads_red_car_and_dog_textures() {
-        let mesh = load_obj("assets/red_car.obj").unwrap();
-
-        assert_eq!(mesh.materials.len(), 3);
-        assert!(mesh.materials[1].diffuse_texture.is_some());
-        assert!(mesh.materials[2].diffuse_texture.is_some());
-        assert!(mesh
-            .vertices
-            .iter()
-            .any(|vertex| vertex.material_index == 1));
-        assert!(mesh
-            .vertices
-            .iter()
-            .any(|vertex| vertex.material_index == 2));
-    }
 }

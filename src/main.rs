@@ -30,8 +30,8 @@ use std::time::{Duration, Instant};
 use uniforms::Uniforms;
 use world::WorldUpdate;
 
-const WINDOW_WIDTH: i32 = 600;
-const WINDOW_HEIGHT: i32 = 650;
+const WINDOW_WIDTH: i32 = 800;
+const WINDOW_HEIGHT: i32 = 600;
 const WINDOW_TITLE: &str = "Software Renderer";
 const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
@@ -72,6 +72,7 @@ fn main() {
         model_matrix: Matrix::identity(),
         camera_pos: Vector3::zero(),
         camera_target: Vector3::zero(),
+        camera_up: Vector3::new(0.0, 1.0, 0.0),
     };
     let mut movement = ShipMovement::new(&mesh, rocket_audio.moving_duration());
     let mut world = build_solar_system();
@@ -82,10 +83,7 @@ fn main() {
         let input = InputState::read(&window);
         let frame_time = window.get_frame_time();
         movement.update(&input, frame_time, &mut uniforms);
-        world.update(&WorldUpdate {
-            frame_time,
-            velocity: movement.world_velocity(),
-        });
+        world.update(&WorldUpdate { frame_time });
         rocket_audio.update(
             input.thrust,
             input.braking,
@@ -135,7 +133,12 @@ fn benchmark_triangles() {
         for _ in 0..BENCHMARK_REPETITIONS {
             let start = Instant::now();
             for _ in 0..BENCHMARK_ITERATIONS {
-                let fragments = rasterize(black_box(&triangles), mode);
+                let fragments = rasterize(
+                    black_box(&triangles),
+                    mode,
+                    WINDOW_WIDTH as u32,
+                    WINDOW_HEIGHT as u32,
+                );
                 fragment_count = fragments.len();
                 black_box(fragments);
             }

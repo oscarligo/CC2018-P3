@@ -8,10 +8,10 @@ const EPSILON: f32 = 1e-5;
 const PIXEL_CENTER_OFFSET: f32 = 0.5;
 const SCANLINE_INTERSECTION_CAPACITY: usize = 2;
 
-pub fn triangle(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
-    let mut fragments = line(a, b);
-    fragments.extend(line(b, c));
-    fragments.extend(line(c, a));
+pub fn triangle(a: &Vertex, b: &Vertex, c: &Vertex, width: u32, height: u32) -> Vec<Fragment> {
+    let mut fragments = line(a, b, width, height);
+    fragments.extend(line(b, c, width, height));
+    fragments.extend(line(c, a, width, height));
     fragments
 }
 
@@ -62,7 +62,13 @@ fn barycentric(point: Vector2, positions: [Vector2; 3], area: f32) -> [f32; 3] {
     ]
 }
 
-pub fn triangle_barycentric(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
+pub fn triangle_barycentric(
+    a: &Vertex,
+    b: &Vertex,
+    c: &Vertex,
+    width: u32,
+    height: u32,
+) -> Vec<Fragment> {
     let Some(points) = positions(a, b, c) else {
         return Vec::new();
     };
@@ -71,26 +77,32 @@ pub fn triangle_barycentric(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment>
         return Vec::new();
     }
 
-    let min_x = points
+    let viewport_width = i32::try_from(width).unwrap_or(i32::MAX);
+    let viewport_height = i32::try_from(height).unwrap_or(i32::MAX);
+    let min_x = (points
         .iter()
         .map(|p| p.x)
         .fold(f32::INFINITY, f32::min)
-        .floor() as i32;
-    let max_x = points
+        .floor() as i32)
+        .clamp(0, viewport_width);
+    let max_x = (points
         .iter()
         .map(|p| p.x)
         .fold(f32::NEG_INFINITY, f32::max)
-        .ceil() as i32;
-    let min_y = points
+        .ceil() as i32)
+        .clamp(0, viewport_width);
+    let min_y = (points
         .iter()
         .map(|p| p.y)
         .fold(f32::INFINITY, f32::min)
-        .floor() as i32;
-    let max_y = points
+        .floor() as i32)
+        .clamp(0, viewport_height);
+    let max_y = (points
         .iter()
         .map(|p| p.y)
         .fold(f32::NEG_INFINITY, f32::max)
-        .ceil() as i32;
+        .ceil() as i32)
+        .clamp(0, viewport_height);
     let mut fragments = Vec::new();
 
     for y in min_y..max_y {
@@ -109,7 +121,13 @@ pub fn triangle_barycentric(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment>
     fragments
 }
 
-pub fn triangle_scanline(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
+pub fn triangle_scanline(
+    a: &Vertex,
+    b: &Vertex,
+    c: &Vertex,
+    width: u32,
+    height: u32,
+) -> Vec<Fragment> {
     let Some(points) = positions(a, b, c) else {
         return Vec::new();
     };
@@ -118,16 +136,24 @@ pub fn triangle_scanline(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
         return Vec::new();
     }
 
-    let min_y = points
+    if width == 0 || height == 0 {
+        return Vec::new();
+    }
+
+    let viewport_width = i32::try_from(width).unwrap_or(i32::MAX);
+    let viewport_height = i32::try_from(height).unwrap_or(i32::MAX);
+    let min_y = (points
         .iter()
         .map(|p| p.y)
         .fold(f32::INFINITY, f32::min)
-        .floor() as i32;
-    let max_y = points
+        .floor() as i32)
+        .clamp(0, viewport_height);
+    let max_y = (points
         .iter()
         .map(|p| p.y)
         .fold(f32::NEG_INFINITY, f32::max)
-        .ceil() as i32;
+        .ceil() as i32)
+        .clamp(0, viewport_height);
     let edges = [
         (points[0], points[1]),
         (points[1], points[2]),
@@ -152,8 +178,14 @@ pub fn triangle_scanline(a: &Vertex, b: &Vertex, c: &Vertex) -> Vec<Fragment> {
             continue;
         }
         intersections.sort_by(f32::total_cmp);
-        let min_x = (intersections[0] - PIXEL_CENTER_OFFSET).ceil() as i32;
-        let max_x = (intersections[1] - PIXEL_CENTER_OFFSET).floor() as i32;
+        let min_x =
+            ((intersections[0] - PIXEL_CENTER_OFFSET).ceil() as i32).clamp(0, viewport_width - 1);
+        let max_x =
+            ((intersections[1] - PIXEL_CENTER_OFFSET).floor() as i32).clamp(0, viewport_width - 1);
+
+        if min_x > max_x {
+            continue;
+        }
 
         for x in min_x..=max_x {
             let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
