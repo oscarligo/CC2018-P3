@@ -1,4 +1,5 @@
 use crate::framebuffer::Framebuffer;
+use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use raylib::prelude::Vector3;
 
@@ -33,7 +34,7 @@ pub trait WorldObject {
     fn transform(&self) -> &WorldTransform;
     fn transform_mut(&mut self) -> &mut WorldTransform;
     fn update(&mut self, _update: &WorldUpdate) {}
-    fn draw(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms);
+    fn draw(&mut self, renderer: &mut Renderer, framebuffer: &mut Framebuffer, uniforms: &Uniforms);
 }
 
 #[derive(Default)]
@@ -57,9 +58,14 @@ impl World {
         }
     }
 
-    pub fn draw(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
+    pub fn draw(
+        &mut self,
+        renderer: &mut Renderer,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+    ) {
         for object in &mut self.objects {
-            object.draw(framebuffer, uniforms);
+            object.draw(renderer, framebuffer, uniforms);
         }
     }
 }

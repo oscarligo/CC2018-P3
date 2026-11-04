@@ -21,7 +21,7 @@ use framebuffer::Framebuffer;
 use input::InputState;
 use rasterizer::{rasterize, TriangleMode};
 use raylib::prelude::*;
-use render::render;
+use render::Renderer;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
 use solar_system::build_solar_system;
@@ -65,8 +65,7 @@ fn main() {
 
     // Load the 3D object from an .obj file
     let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
-    let mut transformed_vertices = Vec::with_capacity(mesh.vertices.len());
-    let mut fragments = Vec::new();
+    let mut renderer = Renderer::default();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
 
     let mut uniforms = Uniforms {
@@ -94,17 +93,10 @@ fn main() {
             frame_time,
         );
 
-        world.draw(&mut framebuffer, &uniforms);
+        world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
-        render(
-            &mut framebuffer,
-            &uniforms,
-            &mesh,
-            triangle_mode,
-            &mut transformed_vertices,
-            &mut fragments,
-        );
+        renderer.render(&mut framebuffer, &uniforms, &mesh, triangle_mode);
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 

@@ -1,8 +1,7 @@
-use crate::fragment::Fragment;
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::{Material, Mesh};
 use crate::rasterizer::TriangleMode;
-use crate::render::render;
+use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
 use crate::world::{WorldObject, WorldTransform, WorldUpdate};
@@ -40,21 +39,17 @@ pub struct Sun {
     rotation: f32,
     time: f32,
     base_normals: Vec<Vector3>,
-    transformed_vertices: Vec<Vertex>,
-    fragments: Vec<Fragment>,
 }
 
 impl Sun {
     pub fn new(position: Vector3, scale: f32) -> Self {
         let (mesh, base_normals) = sphere_mesh();
         Self {
-            transformed_vertices: Vec::with_capacity(mesh.vertices.len()),
             mesh,
             transform: WorldTransform::new(position, Vector3::new(scale, scale, scale)),
             rotation: 0.0,
             time: 0.0,
             base_normals,
-            fragments: Vec::new(),
         }
     }
 
@@ -202,7 +197,12 @@ impl WorldObject for Sun {
         self.time += update.frame_time;
     }
 
-    fn draw(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
+    fn draw(
+        &mut self,
+        renderer: &mut Renderer,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+    ) {
         // Actualiza la convección de plasma y el oscurecimiento de limbo antes de rasterizar
         self.animate_surface(uniforms.camera_pos);
 
@@ -212,13 +212,11 @@ impl WorldObject for Sun {
             camera_target: uniforms.camera_target,
             camera_up: uniforms.camera_up,
         };
-        render(
+        renderer.render(
             framebuffer,
             &sun_uniforms,
             &self.mesh,
             TriangleMode::FilledBarycentric,
-            &mut self.transformed_vertices,
-            &mut self.fragments,
         );
     }
 }
