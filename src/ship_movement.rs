@@ -1,25 +1,10 @@
+use crate::follow_camera::FollowCamera;
 use crate::framebuffer::Framebuffer;
 use crate::input::InputState;
 use crate::load_objects::Mesh;
 use crate::projection::project_vertex;
 use crate::uniforms::Uniforms;
 use raylib::prelude::*;
-
-// Camera constants 
-const INITIAL_CAMERA_DISTANCE_FACTOR: f32 = 2.6;
-const MIN_CAMERA_DISTANCE_FACTOR: f32 = 1.2;
-const MAX_CAMERA_DISTANCE_FACTOR: f32 = 8.0;
-const ZOOM_SENSITIVITY: f32 = 0.1;
-const CAMERA_HEIGHT_FACTOR: f32 = 0.25;
-const CAMERA_FOLLOW_STIFFNESS: f32 = 6.5;
-const CAMERA_THRUST_PULLBACK: f32 = 1.12;
-const CAMERA_BOOST_PULLBACK: f32 = 1.42;
-const CAMERA_BRAKE_PUSHIN: f32 = 0.85;
-const CAMERA_ORBIT_SENSITIVITY: f32 = 0.008;
-const MAX_CAMERA_ORBIT_PITCH: f32 = 80.0_f32.to_radians();
-const CAMERA_RETURN_DELAY: f32 = 1.2;
-const CAMERA_RETURN_SPEED: f32 = 2.5;
-const CAMERA_ALIGNMENT_EPSILON: f32 = 0.001;
 
 // Flight constants
 const MAX_SHIP_PITCH_TILT: f32 = 16.0_f32.to_radians();
@@ -104,14 +89,7 @@ const EXHAUST_CLOSE_GROWTH: f32 = 3.0;
 pub struct ShipMovement {
     model_center: Vector3,
     target: Vector3,
-    camera_distance: f32,
-    effective_camera_distance: f32,
-    min_distance: f32,
-    max_distance: f32,
-    camera_orbit_pitch: f32,
-    camera_orbit_yaw: f32,
-    camera_return_timer: f32,
-    camera_orientation: Quaternion,
+    camera: FollowCamera,
     ship_pitch: f32,
     ship_yaw: f32,
     ship_roll: f32,
@@ -203,20 +181,12 @@ impl ShipMovement {
             .map(|vertex| vertex.position)
             .unwrap_or(target);
 
-        let initial_cam_dist = radius * INITIAL_CAMERA_DISTANCE_FACTOR;
         let max_speed = radius * MAX_SPEED_FACTOR;
 
         Self {
             model_center: target,
             target,
-            camera_distance: initial_cam_dist,
-            effective_camera_distance: initial_cam_dist,
-            min_distance: radius * MIN_CAMERA_DISTANCE_FACTOR,
-            max_distance: radius * MAX_CAMERA_DISTANCE_FACTOR,
-            camera_orbit_pitch: 0.0,
-            camera_orbit_yaw: 0.0,
-            camera_return_timer: 0.0,
-            camera_orientation: Quaternion::identity(),
+            camera: FollowCamera::new(radius),
             ship_pitch: 0.0,
             ship_yaw: 0.0,
             ship_roll: 0.0,
@@ -258,8 +228,9 @@ impl ShipMovement {
         self.update_ship(input, frame_time);
         self.update_motion(input.thrust, input.boost, input.braking, frame_time);
         self.target += self.world_velocity() * frame_time;
-        self.update_camera(input, frame_time);
-        self.apply(uniforms);
+        self.camera
+            .update(input, frame_time, self.target, self.orientation, uniforms);
+        self.apply_model(uniforms);
 
         let show_wing_trails =
             input.boost || (self.speed > self.max_speed * 0.5 && self.yaw_rate.abs() > 0.35);
@@ -343,59 +314,7 @@ impl ShipMovement {
         }
     }
 
-    fn update_camera(&mut self, input: &InputState, frame_time: f32) {
-        if input.zoom_delta != 0.0 {
-            self.camera_distance = (self.camera_distance
-                * (1.0 - input.zoom_delta * ZOOM_SENSITIVITY))
-                .clamp(self.min_distance, self.max_distance);
-        }
-
-        let distance_mult = if input.braking {
-            CAMERA_BRAKE_PUSHIN
-        } else if input.boost {
-            CAMERA_BOOST_PULLBACK
-        } else if input.thrust {
-            CAMERA_THRUST_PULLBACK
-        } else {
-            1.0
-        };
-        let desired_distance = (self.camera_distance * distance_mult)
-            .clamp(self.min_distance * 0.85, self.max_distance * 1.3);
-        self.effective_camera_distance +=
-            (desired_distance - self.effective_camera_distance) * (5.0 * frame_time).min(1.0);
-
-        let follow_blend = (CAMERA_FOLLOW_STIFFNESS * frame_time).min(1.0);
-        self.camera_orientation = self
-            .camera_orientation
-            .slerp(self.orientation, follow_blend)
-            .normalize();
-
-        if input.orbiting {
-            self.camera_orbit_yaw -= input.mouse_delta.x * CAMERA_ORBIT_SENSITIVITY;
-            self.camera_orbit_yaw = self
-                .camera_orbit_yaw
-                .sin()
-                .atan2(self.camera_orbit_yaw.cos());
-            self.camera_orbit_pitch = (self.camera_orbit_pitch
-                + input.mouse_delta.y * CAMERA_ORBIT_SENSITIVITY)
-                .clamp(-MAX_CAMERA_ORBIT_PITCH, MAX_CAMERA_ORBIT_PITCH);
-            self.camera_return_timer = CAMERA_RETURN_DELAY;
-        } else if !self.camera_is_aligned() {
-            self.camera_return_timer = (self.camera_return_timer - frame_time).max(0.0);
-            if self.camera_return_timer == 0.0 {
-                let step = CAMERA_RETURN_SPEED * frame_time;
-                self.camera_orbit_pitch = move_towards(self.camera_orbit_pitch, 0.0, step);
-                self.camera_orbit_yaw = move_towards(self.camera_orbit_yaw, 0.0, step);
-            }
-        }
-    }
-
-    fn camera_is_aligned(&self) -> bool {
-        self.camera_orbit_pitch.abs() <= CAMERA_ALIGNMENT_EPSILON
-            && self.camera_orbit_yaw.abs() <= CAMERA_ALIGNMENT_EPSILON
-    }
-
-    fn apply(&self, uniforms: &mut Uniforms) {
+    fn apply_model(&self, uniforms: &mut Uniforms) {
         let ship_direction = self.orientation.to_matrix();
         let local_attitude = Matrix::rotate_y(self.ship_yaw)
             * Matrix::rotate_x(self.ship_pitch)
@@ -409,20 +328,6 @@ impl ShipMovement {
         ) * local_attitude
             * ship_direction
             * Matrix::translate(self.target.x, self.target.y, self.target.z);
-
-        let camera_rotation = Matrix::rotate_x(self.camera_orbit_pitch)
-            * Matrix::rotate_y(self.camera_orbit_yaw)
-            * self.camera_orientation.to_matrix();
-
-        let dist = self.effective_camera_distance;
-        uniforms.camera_pos = self.target
-            + transform_direction(
-                &camera_rotation,
-                Vector3::new(0.0, dist * CAMERA_HEIGHT_FACTOR, -dist),
-            );
-
-        uniforms.camera_target = self.target;
-        uniforms.camera_up = transform_direction(&camera_rotation, Vector3::new(0.0, 1.0, 0.0));
     }
 
     fn update_trail(&mut self, emitting: bool, frame_time: f32, uniforms: &Uniforms) {
@@ -458,8 +363,8 @@ impl ShipMovement {
 
     pub fn draw_trail(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
         let point_radius = scaled_trail_radius(
-            self.effective_camera_distance,
-            self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR,
+            self.camera.effective_distance(),
+            self.camera.reference_distance(),
         );
         let mut previous = [None, None];
         for particle in &self.trail {
@@ -529,8 +434,8 @@ impl ShipMovement {
         let ship_radius = self.trail_speed / TRAIL_SPEED_FACTOR;
         let nozzle_radius = ship_radius * 0.085;
 
-        let reference_distance = self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR;
-        let zoom_ratio = reference_distance / self.effective_camera_distance.max(0.001);
+        let reference_distance = self.camera.reference_distance();
+        let zoom_ratio = reference_distance / self.camera.effective_distance().max(0.001);
         let emission_density = if zoom_ratio > 1.0 {
             (zoom_ratio * zoom_ratio * EXHAUST_CLOSE_DENSITY_BOOST).min(EXHAUST_CLOSE_MAX_DENSITY)
         } else {
@@ -638,7 +543,7 @@ impl ShipMovement {
     }
 
     pub fn draw_exhaust(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
-        let reference_distance = self.min_distance * INITIAL_CAMERA_DISTANCE_FACTOR;
+        let reference_distance = self.camera.reference_distance();
 
         for particle in &self.exhaust {
             let Some((position, depth)) = project_vertex(

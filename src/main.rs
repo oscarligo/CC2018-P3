@@ -1,3 +1,4 @@
+mod follow_camera;
 mod fragment;
 mod framebuffer;
 mod input;
