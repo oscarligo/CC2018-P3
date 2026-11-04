@@ -1,6 +1,7 @@
 use crate::fragment::Fragment;
 use crate::framebuffer::Framebuffer;
-use crate::load_objects::{Mesh, project_vertex};
+use crate::load_objects::Mesh;
+use crate::projection::project_vertex;
 use crate::rasterizer::{TriangleMode, rasterize_indexed};
 use crate::shaders::{fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;

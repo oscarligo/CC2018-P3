@@ -1,6 +1,7 @@
 use crate::framebuffer::Framebuffer;
 use crate::input::InputState;
-use crate::load_objects::{Mesh, project_vertex};
+use crate::load_objects::Mesh;
+use crate::projection::project_vertex;
 use crate::uniforms::Uniforms;
 use raylib::prelude::*;
 

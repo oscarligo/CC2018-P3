@@ -5,6 +5,7 @@ mod line;
 mod load_objects;
 pub mod objects;
 pub mod planets;
+mod projection;
 mod rasterizer;
 mod render;
 mod rocket_audio;
