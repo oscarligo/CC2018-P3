@@ -12,6 +12,7 @@ mod render;
 mod rocket_audio;
 pub mod solar_system;
 mod shaders;
+mod ship_effects;
 mod ship_movement;
 mod triangle;
 mod uniforms;
