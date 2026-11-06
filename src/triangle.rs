@@ -1,5 +1,4 @@
 use crate::fragment::Fragment;
-use crate::line::line;
 use crate::vertex::Vertex;
 use raylib::prelude::Vector2;
 
@@ -7,13 +6,6 @@ use raylib::prelude::Vector2;
 const EPSILON: f32 = 1e-5;
 const PIXEL_CENTER_OFFSET: f32 = 0.5;
 const SCANLINE_INTERSECTION_CAPACITY: usize = 2;
-
-pub fn triangle(a: &Vertex, b: &Vertex, c: &Vertex, width: u32, height: u32) -> Vec<Fragment> {
-    let mut fragments = line(a, b, width, height);
-    fragments.extend(line(b, c, width, height));
-    fragments.extend(line(c, a, width, height));
-    fragments
-}
 
 fn positions(a: &Vertex, b: &Vertex, c: &Vertex) -> Option<[Vector2; 3]> {
     Some([a.screen_position?, b.screen_position?, c.screen_position?])
@@ -35,6 +27,13 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
     let color = vertices[0].color * corrected[0]
         + vertices[1].color * corrected[1]
         + vertices[2].color * corrected[2];
+    let object_position = vertices[0].position * corrected[0]
+        + vertices[1].position * corrected[1]
+        + vertices[2].position * corrected[2];
+    let normal = (vertices[0].transformed_normal * corrected[0]
+        + vertices[1].transformed_normal * corrected[1]
+        + vertices[2].transformed_normal * corrected[2])
+        .normalize();
     let depth = 1.0 / inverse_depth;
     let tex_coord = match (
         vertices[0].tex_coord,
@@ -47,6 +46,8 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
 
     Fragment {
         position,
+        object_position,
+        normal,
         color,
         depth,
         tex_coord,
@@ -60,65 +61,6 @@ fn barycentric(point: Vector2, positions: [Vector2; 3], area: f32) -> [f32; 3] {
         edge(positions[2], positions[0], point) / area,
         edge(positions[0], positions[1], point) / area,
     ]
-}
-
-pub fn triangle_barycentric(
-    a: &Vertex,
-    b: &Vertex,
-    c: &Vertex,
-    width: u32,
-    height: u32,
-) -> Vec<Fragment> {
-    let Some(points) = positions(a, b, c) else {
-        return Vec::new();
-    };
-    let area = edge(points[1], points[2], points[0]);
-    if area.abs() <= EPSILON {
-        return Vec::new();
-    }
-
-    let viewport_width = i32::try_from(width).unwrap_or(i32::MAX);
-    let viewport_height = i32::try_from(height).unwrap_or(i32::MAX);
-    let min_x = (points
-        .iter()
-        .map(|p| p.x)
-        .fold(f32::INFINITY, f32::min)
-        .floor() as i32)
-        .clamp(0, viewport_width);
-    let max_x = (points
-        .iter()
-        .map(|p| p.x)
-        .fold(f32::NEG_INFINITY, f32::max)
-        .ceil() as i32)
-        .clamp(0, viewport_width);
-    let min_y = (points
-        .iter()
-        .map(|p| p.y)
-        .fold(f32::INFINITY, f32::min)
-        .floor() as i32)
-        .clamp(0, viewport_height);
-    let max_y = (points
-        .iter()
-        .map(|p| p.y)
-        .fold(f32::NEG_INFINITY, f32::max)
-        .ceil() as i32)
-        .clamp(0, viewport_height);
-    let mut fragments = Vec::new();
-
-    for y in min_y..max_y {
-        for x in min_x..max_x {
-            let center = Vector2::new(
-                x as f32 + PIXEL_CENTER_OFFSET,
-                y as f32 + PIXEL_CENTER_OFFSET,
-            );
-            let weights = barycentric(center, points, area);
-            if weights.iter().all(|weight| *weight >= -EPSILON) {
-                fragments.push(fragment_at(center, [a, b, c], weights));
-            }
-        }
-    }
-
-    fragments
 }
 
 pub fn triangle_scanline(

@@ -1,6 +1,5 @@
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::{Material, Mesh};
-use crate::rasterizer::TriangleMode;
 use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
@@ -12,7 +11,7 @@ use std::f32::consts::{PI, TAU};
 // Apariencia: Parámetros geométricos y paleta termodinámica del Sol
 // ============================================================================
 const SUN_RADIUS: f32 = 100.0;
-// Mayor densidad geométrica para capturar los detalles del ruido en TriangleMode::FilledBarycentric
+// Mayor densidad geométrica para capturar los detalles del ruido superficial.
 const LATITUDE_SEGMENTS: usize = 36;
 const LONGITUDE_SEGMENTS: usize = 54;
 
@@ -216,7 +215,7 @@ impl WorldObject for Sun {
             framebuffer,
             &sun_uniforms,
             &self.mesh,
-            TriangleMode::FilledBarycentric,
+            crate::shaders::FragmentShader::Material,
         );
     }
 }

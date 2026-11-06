@@ -1,9 +1,10 @@
+mod celestial_shaders;
 mod follow_camera;
 mod fragment;
 mod framebuffer;
 mod input;
-mod line;
 mod load_objects;
+mod noise;
 pub mod objects;
 pub mod planets;
 mod projection;
@@ -21,15 +22,14 @@ pub mod world;
 
 use framebuffer::Framebuffer;
 use input::InputState;
-use rasterizer::{rasterize, TriangleMode};
 use raylib::prelude::*;
 use render::Renderer;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
+use shaders::FragmentShader;
 use solar_system::build_solar_system;
-use std::hint::black_box;
 use std::thread;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use uniforms::Uniforms;
 use world::WorldUpdate;
 
@@ -38,26 +38,8 @@ const WINDOW_HEIGHT: i32 = 600;
 const WINDOW_TITLE: &str = "Software Renderer";
 const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
-const BENCHMARK_REPETITIONS: usize = 7;
-const BENCHMARK_ITERATIONS: usize = 100;
 
 fn main() {
-    let arguments: Vec<String> = std::env::args().collect();
-    if arguments
-        .iter()
-        .any(|argument| argument == "--benchmark-triangles")
-    {
-        benchmark_triangles();
-        return;
-    }
-    let triangle_mode = if arguments.iter().any(|argument| argument == "--wireframe") {
-        TriangleMode::Wireframe
-    } else if arguments.iter().any(|argument| argument == "--scanline") {
-        TriangleMode::FilledScanline
-    } else {
-        TriangleMode::FilledBarycentric
-    };
-
     let (mut window, thread) = raylib::init()
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title(WINDOW_TITLE)
@@ -98,51 +80,16 @@ fn main() {
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
-        renderer.render(&mut framebuffer, &uniforms, &mesh, triangle_mode);
+        renderer.render(
+            &mut framebuffer,
+            &uniforms,
+            &mesh,
+            FragmentShader::Material,
+        );
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 
         framebuffer.swap_buffers(&mut window, &thread);
         thread::sleep(FRAME_DELAY);
-    }
-}
-
-fn benchmark_triangles() {
-    let mut vertices = [
-        vertex::Vertex::new(Vector3::new(20.0, 20.0, 1.0)),
-        vertex::Vertex::new(Vector3::new(580.0, 80.0, 1.0)),
-        vertex::Vertex::new(Vector3::new(250.0, 620.0, 1.0)),
-    ];
-    for vertex in &mut vertices {
-        vertex.screen_position = Some(Vector2::new(vertex.position.x, vertex.position.y));
-        vertex.camera_depth = 1.0;
-    }
-    let triangles = vec![vertices];
-
-    for mode in [
-        TriangleMode::FilledBarycentric,
-        TriangleMode::FilledScanline,
-    ] {
-        let mut measurements = Vec::with_capacity(BENCHMARK_REPETITIONS);
-        let mut fragment_count = 0;
-        for _ in 0..BENCHMARK_REPETITIONS {
-            let start = Instant::now();
-            for _ in 0..BENCHMARK_ITERATIONS {
-                let fragments = rasterize(
-                    black_box(&triangles),
-                    mode,
-                    WINDOW_WIDTH as u32,
-                    WINDOW_HEIGHT as u32,
-                );
-                fragment_count = fragments.len();
-                black_box(fragments);
-            }
-            measurements.push(start.elapsed());
-        }
-        measurements.sort();
-        println!(
-            "{mode:?}: mediana de 100 ejecuciones = {:?}, fragmentos = {fragment_count}",
-            measurements[measurements.len() / 2],
-        );
     }
 }

@@ -13,14 +13,5 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 - Rueda del ratón: zoom. Mover el cursor sin botones no dirige la nave.
 
 ```bash
-# Relleno baricéntrico, modo predeterminado
 cargo run --release
-
-# Relleno por scanlines
-cargo run --release -- --scanline
-
-# Solo contorno
-cargo run --release -- --wireframe
-
-# Comparación de rendimiento sin abrir la ventana
-cargo run --release -- --benchmark-triangles
+```

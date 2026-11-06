@@ -2,8 +2,8 @@ use crate::fragment::Fragment;
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::Mesh;
 use crate::projection::project_vertex;
-use crate::rasterizer::{TriangleMode, rasterize_indexed};
-use crate::shaders::{fragment_shader, vertex_shader};
+use crate::rasterizer::rasterize_indexed;
+use crate::shaders::{FragmentShader, fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
 
@@ -19,7 +19,7 @@ impl Renderer {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
         mesh: &Mesh,
-        mode: TriangleMode,
+        shader: FragmentShader,
     ) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
@@ -49,7 +49,6 @@ impl Renderer {
         rasterize_indexed(
             &self.transformed_vertices,
             &mesh.indices,
-            mode,
             framebuffer.width,
             framebuffer.height,
             &mut self.fragments,
@@ -57,7 +56,7 @@ impl Renderer {
 
         // 3. Fragment Processing
         for fragment in &self.fragments {
-            let Some(color) = fragment_shader(fragment, &mesh.materials) else {
+            let Some(color) = fragment_shader(fragment, &mesh.materials, shader) else {
                 continue;
             };
 

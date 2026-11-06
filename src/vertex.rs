@@ -3,7 +3,9 @@ use raylib::prelude::{Vector2, Vector3};
 #[derive(Clone, Copy, Debug)]
 pub struct Vertex {
     pub position: Vector3,
+    pub normal: Vector3,
     pub transformed_position: Vector3,
+    pub transformed_normal: Vector3,
     pub screen_position: Option<Vector2>,
     pub camera_depth: f32,
     pub color: Vector3,
@@ -15,7 +17,9 @@ impl Vertex {
     pub fn new(position: Vector3) -> Self {
         Self {
             position,
+            normal: Vector3::zero(),
             transformed_position: position,
+            transformed_normal: Vector3::zero(),
             screen_position: None,
             camera_depth: f32::INFINITY,
             color: Vector3::new(1.0, 1.0, 1.0),

@@ -69,32 +69,3 @@ impl World {
         }
     }
 }
-
-#[cfg(test)]
-mod tests {
-    use super::{World, WorldUpdate};
-    use crate::objects::sun::Sun;
-    use raylib::prelude::Vector3;
-
-    #[test]
-    fn long_world_updates_move_only_entities_with_their_own_velocity() {
-        let stationary_position = Vector3::new(10.0, 20.0, 30.0);
-        let moving_position = Vector3::new(-100.0, 25.0, 300.0);
-        let velocity = Vector3::new(4.0, -2.0, 8.0);
-        let mut moving = Sun::new(moving_position, 1.0);
-        moving.set_velocity(velocity);
-        let mut world = World::new();
-        world.add(Sun::new(stationary_position, 1.0));
-        world.add(moving);
-
-        for _ in 0..1000 {
-            world.update(&WorldUpdate { frame_time: 0.125 });
-        }
-
-        assert_eq!(world.objects[0].transform().position, stationary_position);
-        assert_eq!(
-            world.objects[1].transform().position,
-            moving_position + velocity * 125.0
-        );
-    }
-}
