@@ -24,6 +24,7 @@ const MEDIUM_LOD_ENTER_RADIUS: f32 = 32.0;
 const MEDIUM_LOD_EXIT_RADIUS: f32 = 26.0;
 const MEDIUM_UPDATE_INTERVAL: f32 = 1.0 / 30.0;
 const LOW_UPDATE_INTERVAL: f32 = 1.0 / 10.0;
+const LOD_TRANSITION_SECONDS: f32 = 1.2;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum SphereLod {
@@ -32,9 +33,66 @@ pub(crate) enum SphereLod {
     Low,
 }
 
+struct LodTransition {
+    target: SphereLod,
+    elapsed: f32,
+    refining: bool,
+    coarse_positions: Vec<Vector3>,
+    mesh: Mesh,
+}
+
+impl LodTransition {
+    fn new(from: SphereLod, target: SphereLod) -> Self {
+        let refining = lod_detail(target) > lod_detail(from);
+        let topology = if refining { target } else { from };
+        let coarse = if refining { from } else { target };
+        let source = sphere_mesh(topology);
+        let coarse_positions = source
+            .vertices
+            .iter()
+            .map(|vertex| project_to_lod_surface(vertex.normal, coarse))
+            .collect::<Vec<_>>();
+        let mut vertices = source.vertices.clone();
+        if refining {
+            for (vertex, position) in vertices.iter_mut().zip(&coarse_positions) {
+                vertex.position = *position;
+            }
+        }
+        Self {
+            target,
+            elapsed: 0.0,
+            refining,
+            coarse_positions,
+            mesh: Mesh {
+                vertices,
+                indices: source.indices.clone(),
+                materials: vec![Material {
+                    diffuse_texture: None,
+                }],
+            },
+        }
+    }
+
+    fn advance(&mut self, frame_time: f32) -> bool {
+        self.elapsed += frame_time;
+        let progress = (self.elapsed / LOD_TRANSITION_SECONDS).clamp(0.0, 1.0);
+        let progress = progress * progress * (3.0 - 2.0 * progress);
+        for (vertex, coarse) in self.mesh.vertices.iter_mut().zip(&self.coarse_positions) {
+            let fine = vertex.normal;
+            vertex.position = if self.refining {
+                *coarse + (fine - *coarse) * progress
+            } else {
+                fine + (*coarse - fine) * progress
+            };
+        }
+        self.elapsed >= LOD_TRANSITION_SECONDS
+    }
+}
+
 pub struct CelestialBody {
     colors: Vec<Vector3>,
     lod: SphereLod,
+    lod_transition: Option<LodTransition>,
     pub(crate) transform: WorldTransform,
     kind: CelestialKind,
     rotation: f32,
@@ -79,6 +137,7 @@ impl CelestialBody {
         let mut body = Self {
             colors: vec![Vector3::zero(); mesh.vertices.len()],
             lod,
+            lod_transition: None,
             transform: WorldTransform::new(
                 position,
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
@@ -140,6 +199,9 @@ impl CelestialBody {
     }
 
     fn select_lod(&mut self, projected_radius: f32) -> bool {
+        if self.lod_transition.is_some() {
+            return false;
+        }
         let lod = match self.lod {
             SphereLod::High if projected_radius < MEDIUM_LOD_EXIT_RADIUS => SphereLod::Low,
             SphereLod::High if projected_radius < HIGH_LOD_EXIT_RADIUS => SphereLod::Medium,
@@ -152,11 +214,32 @@ impl CelestialBody {
         if lod == self.lod {
             return false;
         }
-        self.lod = lod;
-        self.colors
-            .resize(sphere_mesh(lod).vertices.len(), Vector3::zero());
-        self.surface_dirty = true;
+        let transition = LodTransition::new(self.lod, lod);
+        if transition.refining {
+            self.lod = lod;
+            self.colors
+                .resize(sphere_mesh(lod).vertices.len(), Vector3::zero());
+            self.surface_dirty = true;
+        }
+        self.lod_transition = Some(transition);
         true
+    }
+
+    fn advance_lod_transition(&mut self, frame_time: f32) {
+        let Some(transition) = &mut self.lod_transition else {
+            return;
+        };
+        if !transition.advance(frame_time) {
+            return;
+        }
+        let target = transition.target;
+        self.lod_transition = None;
+        if self.lod != target {
+            self.lod = target;
+            self.colors
+                .resize(sphere_mesh(target).vertices.len(), Vector3::zero());
+            self.surface_dirty = true;
+        }
     }
 
     fn surface_update_interval(&self) -> f32 {
@@ -206,6 +289,7 @@ impl WorldObject for CelestialBody {
         self.time += update.frame_time * self.style.animation_speed;
         self.rotation = (self.rotation + self.style.rotation_speed * update.frame_time) % TAU;
         self.surface_elapsed += update.frame_time;
+        self.advance_lod_transition(update.frame_time);
     }
 
     fn bounding_radius(&self) -> Option<f32> {
@@ -246,12 +330,57 @@ impl WorldObject for CelestialBody {
             camera_up: uniforms.camera_up,
             light_position: uniforms.light_position,
         };
-        renderer.render_colored(
-            framebuffer,
-            &body_uniforms,
-            sphere_mesh(self.lod),
-            &self.colors,
-        );
+        let mesh = self
+            .lod_transition
+            .as_ref()
+            .map_or_else(|| sphere_mesh(self.lod), |transition| &transition.mesh);
+        renderer.render_colored(framebuffer, &body_uniforms, mesh, &self.colors);
+    }
+}
+
+fn lod_detail(lod: SphereLod) -> u8 {
+    match lod {
+        SphereLod::Low => 0,
+        SphereLod::Medium => 1,
+        SphereLod::High => 2,
+    }
+}
+
+fn lod_segments(lod: SphereLod) -> (usize, usize) {
+    match lod {
+        SphereLod::High => (HIGH_LATITUDE_SEGMENTS, HIGH_LONGITUDE_SEGMENTS),
+        SphereLod::Medium => (MEDIUM_LATITUDE_SEGMENTS, MEDIUM_LONGITUDE_SEGMENTS),
+        SphereLod::Low => (LOW_LATITUDE_SEGMENTS, LOW_LONGITUDE_SEGMENTS),
+    }
+}
+
+fn project_to_lod_surface(direction: Vector3, lod: SphereLod) -> Vector3 {
+    let (latitude_segments, longitude_segments) = lod_segments(lod);
+    let latitude = direction.y.clamp(-1.0, 1.0).acos() / PI * latitude_segments as f32;
+    let longitude =
+        direction.z.atan2(direction.x).rem_euclid(TAU) / TAU * longitude_segments as f32;
+    let latitude_index = (latitude.floor() as usize).min(latitude_segments - 1);
+    let longitude_index = (longitude.floor() as usize).min(longitude_segments - 1);
+    let latitude_fraction = latitude - latitude_index as f32;
+    let longitude_fraction = longitude - longitude_index as f32;
+    let row = longitude_segments + 1;
+    let current = latitude_index * row + longitude_index;
+    let next = current + row;
+    let mesh = sphere_mesh(lod);
+    let (a, b, c) = if latitude_fraction + longitude_fraction <= 1.0 {
+        (current, current + 1, next)
+    } else {
+        (current + 1, next + 1, next)
+    };
+    let a = mesh.vertices[a].position;
+    let b = mesh.vertices[b].position;
+    let c = mesh.vertices[c].position;
+    let normal = (b - a).cross(c - a);
+    let denominator = normal.dot(direction);
+    if denominator.abs() <= f32::EPSILON {
+        direction
+    } else {
+        direction * (normal.dot(a) / denominator)
     }
 }
 
@@ -388,6 +517,7 @@ mod tests {
         let mut body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero());
         body.select_lod(MEDIUM_LOD_ENTER_RADIUS);
         assert_eq!(body.lod, SphereLod::Medium);
+        body.advance_lod_transition(LOD_TRANSITION_SECONDS);
         body.select_lod(HIGH_LOD_ENTER_RADIUS);
         assert_eq!(body.lod, SphereLod::High);
         assert_eq!(
@@ -401,14 +531,31 @@ mod tests {
         let mut body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero());
         assert!(!body.select_lod(MEDIUM_LOD_ENTER_RADIUS - 1.0));
         assert!(body.select_lod(MEDIUM_LOD_ENTER_RADIUS));
+        body.advance_lod_transition(LOD_TRANSITION_SECONDS);
         assert!(!body.select_lod(MEDIUM_LOD_EXIT_RADIUS + 1.0));
         assert!(body.select_lod(MEDIUM_LOD_EXIT_RADIUS - 1.0));
+        body.advance_lod_transition(LOD_TRANSITION_SECONDS);
 
         body.select_lod(HIGH_LOD_ENTER_RADIUS);
+        body.advance_lod_transition(LOD_TRANSITION_SECONDS);
         assert_eq!(body.lod, SphereLod::High);
         assert!(!body.select_lod(HIGH_LOD_EXIT_RADIUS + 1.0));
         assert!(body.select_lod(HIGH_LOD_EXIT_RADIUS - 1.0));
+        body.advance_lod_transition(LOD_TRANSITION_SECONDS);
         assert_eq!(body.lod, SphereLod::Medium);
+    }
+
+    #[test]
+    fn lod_transition_morphs_between_both_surfaces() {
+        let mut transition = LodTransition::new(SphereLod::Low, SphereLod::Medium);
+        let index = 5 * (MEDIUM_LONGITUDE_SEGMENTS + 1) + 3;
+        let fine = transition.mesh.vertices[index].normal;
+        let coarse = project_to_lod_surface(fine, SphereLod::Low);
+
+        assert!((transition.mesh.vertices[index].position - coarse).length() < 0.0001);
+        assert!((fine - coarse).length() > 0.0001);
+        assert!(transition.advance(LOD_TRANSITION_SECONDS));
+        assert!((transition.mesh.vertices[index].position - fine).length() < 0.0001);
     }
 
     #[test]
