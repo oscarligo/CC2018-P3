@@ -20,6 +20,8 @@ Para ejecutar una comparación reproducible de 240 frames sin abrir una ventana:
 
 ```bash
 cargo run --release -- --benchmark
+cargo run --release -- --benchmark --objects 30
+cargo run --release -- --benchmark --objects 300
 ```
 
 Cada 120 frames se imprime en la terminal un reporte con tiempo promedio y p95 del frame, tiempos por etapa, objetos visibles y descartados, superficies actualizadas, triángulos totales y descartados, y fragmentos cubiertos, rechazados por profundidad y sombreados. Estas métricas excluyen la pausa artificial de 16 ms entre frames.
