@@ -14,6 +14,7 @@ pub(super) struct BodyDefinition {
     pub motion: MotionDefinition,
     pub atmosphere: Option<AtmosphereDefinition>,
     pub ring: Option<RingDefinition>,
+    pub rock_field: Option<RockFieldDefinition>,
     pub rocks: Vec<RockDefinition>,
 }
 
@@ -51,6 +52,11 @@ pub(super) struct RockDefinition {
     pub twist: f32,
 }
 
+pub(super) struct RockFieldDefinition {
+    pub seed: u32,
+    pub count: usize,
+}
+
 pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
     let sun_position = Vector3::new(0.0, 0.0, 500.0);
     let rocky_position = Vector3::new(-300.0, 100.0, 800.0);
@@ -77,6 +83,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
                 shape: BodyShape::Sphere,
             }),
             ring: None,
+            rock_field: None,
             rocks: Vec::new(),
         },
         BodyDefinition {
@@ -104,6 +111,10 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
                 shape: BodyShape::Sphere,
             }),
             ring: None,
+            rock_field: Some(RockFieldDefinition {
+                seed: 0x52A7_19D3,
+                count: 36,
+            }),
             rocks: surface_rocks(),
         },
         BodyDefinition {
@@ -135,6 +146,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
                 tilt_x: 0.34,
                 tilt_z: -0.12,
             }),
+            rock_field: None,
             rocks: Vec::new(),
         },
         BodyDefinition {
@@ -158,6 +170,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
             },
             atmosphere: None,
             ring: None,
+            rock_field: None,
             rocks: Vec::new(),
         },
     ]
@@ -167,12 +180,6 @@ fn surface_rocks() -> Vec<RockDefinition> {
     let directions = [
         Vector3::new(0.0, 0.0, -1.0),
         Vector3::new(-0.55, 0.20, -0.81),
-        Vector3::new(0.48, 0.42, -0.77),
-        Vector3::new(-0.18, 0.90, -0.38),
-        Vector3::new(-0.82, -0.30, -0.48),
-        Vector3::new(0.74, -0.38, -0.55),
-        Vector3::new(0.90, 0.12, 0.42),
-        Vector3::new(-0.40, 0.55, 0.73),
     ];
     directions
         .into_iter()
@@ -211,6 +218,11 @@ mod tests {
             definitions
                 .iter()
                 .any(|definition| !definition.rocks.is_empty())
+        );
+        assert!(
+            definitions
+                .iter()
+                .any(|definition| definition.rock_field.is_some())
         );
         assert!(
             definitions

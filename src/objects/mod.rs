@@ -51,6 +51,15 @@ fn register_body(
     let anchor = body.transform.anchor();
     world.add(body);
 
+    if let Some(field) = definition.rock_field {
+        world.add(rock::RockField::attached_to(
+            anchor.clone(),
+            definition.scale,
+            definition.shape,
+            field.seed,
+            field.count,
+        ));
+    }
     for rock in definition.rocks {
         world.add(rock::SurfaceRock::attached_to(
             anchor.clone(),

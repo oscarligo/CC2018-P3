@@ -529,7 +529,7 @@ fn rocky_mesh(lod: SphereLod) -> &'static Mesh {
     }
 }
 
-fn shape_radius(direction: Vector3, shape: BodyShape) -> f32 {
+pub(crate) fn shape_radius(direction: Vector3, shape: BodyShape) -> f32 {
     match shape {
         BodyShape::Sphere => 1.0,
         BodyShape::Rocky => {

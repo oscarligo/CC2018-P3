@@ -72,3 +72,5 @@ El sistema también contiene un asteroide pequeño, alargado e irregular. Usa un
 Las órbitas locales heredan únicamente la traslación del padre: no deforman el satélite con la escala planetaria ni arrastran su trayectoria con la rotación superficial.
 
 La composición del sistema vive en `objects/catalog.rs`: cada cuerpo declara forma, escala, estilo, movimiento, atmósfera, anillos y rocas. Un ensamblador común resuelve las dependencias padre-hijo y registra los objetos correspondientes.
+
+Los campos de rocas se generan de forma determinista desde una semilla y combinan todas sus formaciones visuales en una sola malla. Solo los puntos de interés se mantienen como objetos independientes con collider e interacción.
