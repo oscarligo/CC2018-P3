@@ -4,6 +4,7 @@ use raylib::prelude::Vector3;
 
 pub mod atmosphere;
 pub mod celestial;
+pub mod ring;
 
 /// Register all objects in the world.
 pub fn register_all(_world: &mut World) {
@@ -63,6 +64,12 @@ pub fn register_all(_world: &mut World) {
         1.05,
         Vector3::new(1.0, 0.58, 0.18),
         0.10,
+    ));
+    _world.add(ring::PlanetRing::new(
+        gas_position,
+        BODY_SCALE * 2.1,
+        0.34,
+        -0.12,
     ));
 }
 

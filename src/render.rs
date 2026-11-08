@@ -40,7 +40,7 @@ impl Renderer {
     }
 
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
-        self.render_internal(framebuffer, uniforms, mesh, None, None);
+        self.render_internal(framebuffer, uniforms, mesh, None, None, false);
     }
 
     pub fn render_colored(
@@ -51,7 +51,16 @@ impl Renderer {
         colors: &[raylib::prelude::Vector3],
     ) {
         assert_eq!(colors.len(), mesh.vertices.len());
-        self.render_internal(framebuffer, uniforms, mesh, Some(colors), None);
+        self.render_internal(framebuffer, uniforms, mesh, Some(colors), None, false);
+    }
+
+    pub fn render_transparent(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+    ) {
+        self.render_internal(framebuffer, uniforms, mesh, None, None, true);
     }
 
     pub fn render_colored_transparent(
@@ -64,7 +73,14 @@ impl Renderer {
     ) {
         assert_eq!(colors.len(), mesh.vertices.len());
         assert_eq!(alphas.len(), mesh.vertices.len());
-        self.render_internal(framebuffer, uniforms, mesh, Some(colors), Some(alphas));
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            Some(colors),
+            Some(alphas),
+            true,
+        );
     }
 
     fn render_internal(
@@ -74,10 +90,10 @@ impl Renderer {
         mesh: &Mesh,
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
+        transparent: bool,
     ) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
-        let transparent = alphas.is_some();
 
         // 1. Vertex Processing
         let stage_start = Instant::now();
