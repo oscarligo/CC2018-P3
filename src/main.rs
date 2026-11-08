@@ -5,6 +5,7 @@ mod framebuffer;
 mod input;
 mod load_objects;
 mod noise;
+mod performance;
 pub mod objects;
 pub mod planets;
 mod projection;
@@ -22,13 +23,14 @@ pub mod world;
 
 use framebuffer::Framebuffer;
 use input::InputState;
+use performance::PerformanceMonitor;
 use raylib::prelude::*;
 use render::Renderer;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
 use solar_system::build_solar_system;
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use uniforms::Uniforms;
 use world::WorldUpdate;
 
@@ -49,6 +51,7 @@ fn main() {
     // Load the 3D object from an .obj file
     let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut renderer = Renderer::default();
+    let mut performance = PerformanceMonitor::default();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
 
     let mut uniforms = Uniforms {
@@ -62,9 +65,12 @@ fn main() {
     movement.update(&InputState::read(&window), 0.0, &mut uniforms);
 
     while !window.window_should_close() {
+        let frame_start = Instant::now();
+        renderer.begin_frame();
         framebuffer.clear();
         let input = InputState::read(&window);
         let frame_time = window.get_frame_time();
+        let update_start = Instant::now();
         movement.update(&input, frame_time, &mut uniforms);
         world.update(&WorldUpdate { frame_time });
         rocket_audio.update(
@@ -75,6 +81,7 @@ fn main() {
             movement.speed_ratio(),
             frame_time,
         );
+        let update_time = update_start.elapsed();
 
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
@@ -84,6 +91,10 @@ fn main() {
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 
         framebuffer.swap_buffers(&mut window, &thread);
+        let mut metrics = renderer.metrics();
+        metrics.update = update_time;
+        metrics.frame = frame_start.elapsed();
+        performance.record(metrics);
         thread::sleep(FRAME_DELAY);
     }
 }

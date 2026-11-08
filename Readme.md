@@ -15,3 +15,5 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 ```bash
 cargo run --release
 ```
+
+Cada 120 frames se imprime en la terminal un reporte con tiempo promedio y p95 del frame, tiempos por etapa, triángulos y fragmentos procesados. Estas métricas excluyen la pausa artificial de 16 ms entre frames.
