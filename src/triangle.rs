@@ -5,7 +5,6 @@ use raylib::prelude::Vector2;
 // Triangle constants
 const EPSILON: f32 = 1e-5;
 const PIXEL_CENTER_OFFSET: f32 = 0.5;
-const SCANLINE_INTERSECTION_CAPACITY: usize = 2;
 
 fn positions(a: &Vertex, b: &Vertex, c: &Vertex) -> Option<[Vector2; 3]> {
     Some([a.screen_position?, b.screen_position?, c.screen_position?])
@@ -101,21 +100,27 @@ pub fn triangle_scanline(
 
     for y in min_y..max_y {
         let sample_y = y as f32 + PIXEL_CENTER_OFFSET;
-        let mut intersections = Vec::with_capacity(SCANLINE_INTERSECTION_CAPACITY);
+        let mut intersections = [0.0; 2];
+        let mut intersection_count = 0;
 
         for (start, end) in edges {
             let crosses = (start.y <= sample_y && sample_y < end.y)
                 || (end.y <= sample_y && sample_y < start.y);
             if crosses {
                 let t = (sample_y - start.y) / (end.y - start.y);
-                intersections.push(start.x + t * (end.x - start.x));
+                if intersection_count < intersections.len() {
+                    intersections[intersection_count] = start.x + t * (end.x - start.x);
+                    intersection_count += 1;
+                }
             }
         }
 
-        if intersections.len() != 2 {
+        if intersection_count != 2 {
             continue;
         }
-        intersections.sort_by(f32::total_cmp);
+        if intersections[0] > intersections[1] {
+            intersections.swap(0, 1);
+        }
         let min_x =
             ((intersections[0] - PIXEL_CENTER_OFFSET).ceil() as i32).clamp(0, viewport_width - 1);
         let max_x =

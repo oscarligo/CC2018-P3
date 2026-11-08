@@ -41,6 +41,11 @@ const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|argument| argument == "--benchmark") {
+        run_benchmark();
+        return;
+    }
+
     let (mut window, thread) = raylib::init()
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title(WINDOW_TITLE)
@@ -96,5 +101,38 @@ fn main() {
         metrics.frame = frame_start.elapsed();
         performance.record(metrics);
         thread::sleep(FRAME_DELAY);
+    }
+}
+
+fn run_benchmark() {
+    const BENCHMARK_FRAMES: usize = 240;
+    const BENCHMARK_FRAME_TIME: f32 = 1.0 / 60.0;
+
+    let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
+    let mut renderer = Renderer::default();
+    let mut performance = PerformanceMonitor::default();
+    let mut world = build_solar_system();
+    let uniforms = Uniforms {
+        model_matrix: Matrix::identity(),
+        camera_pos: Vector3::zero(),
+        camera_target: Vector3::new(0.0, 0.0, 1.0),
+        camera_up: Vector3::new(0.0, 1.0, 0.0),
+    };
+
+    for _ in 0..BENCHMARK_FRAMES {
+        let frame_start = Instant::now();
+        renderer.begin_frame();
+        framebuffer.clear();
+        let update_start = Instant::now();
+        world.update(&WorldUpdate {
+            frame_time: BENCHMARK_FRAME_TIME,
+        });
+        let update_time = update_start.elapsed();
+        world.draw(&mut renderer, &mut framebuffer, &uniforms);
+
+        let mut metrics = renderer.metrics();
+        metrics.update = update_time;
+        metrics.frame = frame_start.elapsed();
+        performance.record(metrics);
     }
 }
