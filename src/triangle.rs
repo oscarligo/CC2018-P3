@@ -27,13 +27,6 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
     let color = vertices[0].color * corrected[0]
         + vertices[1].color * corrected[1]
         + vertices[2].color * corrected[2];
-    let object_position = vertices[0].position * corrected[0]
-        + vertices[1].position * corrected[1]
-        + vertices[2].position * corrected[2];
-    let normal = (vertices[0].transformed_normal * corrected[0]
-        + vertices[1].transformed_normal * corrected[1]
-        + vertices[2].transformed_normal * corrected[2])
-        .normalize();
     let depth = 1.0 / inverse_depth;
     let tex_coord = match (
         vertices[0].tex_coord,
@@ -46,8 +39,6 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
 
     Fragment {
         position,
-        object_position,
-        normal,
         color,
         depth,
         tex_coord,

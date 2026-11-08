@@ -1,10 +1,8 @@
 use super::{color_mix, lit};
-use crate::fragment::Fragment;
 use crate::noise::{fbm, smoothstep};
 use raylib::prelude::Vector3;
 
-pub fn shade(fragment: &Fragment, time: f32) -> Vector3 {
-    let point = fragment.object_position.normalize();
+pub fn shade(point: Vector3, normal: Vector3, time: f32) -> Vector3 {
     let terrain = fbm(point * 3.1, 5);
     let detail = fbm(point * 17.0, 3);
     let ocean = Vector3::new(0.015, 0.12, 0.30) * (0.72 + detail * 0.28);
@@ -23,6 +21,6 @@ pub fn shade(fragment: &Fragment, time: f32) -> Vector3 {
     let clouds = smoothstep(0.59, 0.70, fbm(point * 6.0 + cloud_flow, 4)) * 0.78;
     lit(
         color_mix(surface, Vector3::new(0.92, 0.94, 0.95), clouds),
-        fragment.normal,
+        normal,
     )
 }

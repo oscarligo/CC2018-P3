@@ -26,7 +26,6 @@ use raylib::prelude::*;
 use render::Renderer;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
-use shaders::FragmentShader;
 use solar_system::build_solar_system;
 use std::thread;
 use std::time::Duration;
@@ -80,12 +79,7 @@ fn main() {
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
-        renderer.render(
-            &mut framebuffer,
-            &uniforms,
-            &mesh,
-            FragmentShader::Material,
-        );
+        renderer.render(&mut framebuffer, &uniforms, &mesh);
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 

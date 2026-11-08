@@ -1,15 +1,17 @@
 use crate::celestial_shaders::CelestialKind;
 use crate::framebuffer::Framebuffer;
-use crate::load_objects::{Mesh, load_obj};
+use crate::load_objects::{Material, Mesh};
 use crate::render::Renderer;
-use crate::shaders::FragmentShader;
 use crate::uniforms::Uniforms;
+use crate::vertex::Vertex;
 use crate::world::{WorldObject, WorldTransform, WorldUpdate};
 use raylib::prelude::{Matrix, Vector3};
+use std::f32::consts::{PI, TAU};
 
-const SPHERE_PATH: &str = "assets/sphere.obj";
 const BODY_SCALE: f32 = 165.0;
 const ROTATION_SPEED: f32 = 0.08;
+const LATITUDE_SEGMENTS: usize = 36;
+const LONGITUDE_SEGMENTS: usize = 54;
 
 pub struct CelestialBody {
     mesh: Mesh,
@@ -21,8 +23,8 @@ pub struct CelestialBody {
 
 impl CelestialBody {
     pub fn new(kind: CelestialKind, position: Vector3) -> Self {
-        Self {
-            mesh: load_obj(SPHERE_PATH).expect("Failed to load assets/sphere.obj"),
+        let mut body = Self {
+            mesh: sphere_mesh(),
             transform: WorldTransform::new(
                 position,
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
@@ -30,7 +32,9 @@ impl CelestialBody {
             kind,
             rotation: 0.0,
             time: 0.0,
-        }
+        };
+        body.update_surface();
+        body
     }
 
     fn model_matrix(&self) -> Matrix {
@@ -45,6 +49,20 @@ impl CelestialBody {
                 self.transform.position.z,
             )
     }
+
+    fn update_surface(&mut self) {
+        let (sin_rotation, cos_rotation) = self.rotation.sin_cos();
+        for vertex in &mut self.mesh.vertices {
+            let point = vertex.normal;
+            let world_normal = Vector3::new(
+                point.x * cos_rotation + point.z * sin_rotation,
+                point.y,
+                -point.x * sin_rotation + point.z * cos_rotation,
+            );
+            vertex.color =
+                crate::celestial_shaders::shade(self.kind, point, world_normal, self.time);
+        }
+    }
 }
 
 impl WorldObject for CelestialBody {
@@ -58,7 +76,8 @@ impl WorldObject for CelestialBody {
 
     fn update(&mut self, update: &WorldUpdate) {
         self.time += update.frame_time;
-        self.rotation += ROTATION_SPEED * update.frame_time;
+        self.rotation = (self.rotation + ROTATION_SPEED * update.frame_time) % TAU;
+        self.update_surface();
     }
 
     fn draw(
@@ -73,14 +92,61 @@ impl WorldObject for CelestialBody {
             camera_target: uniforms.camera_target,
             camera_up: uniforms.camera_up,
         };
-        renderer.render(
-            framebuffer,
-            &body_uniforms,
-            &self.mesh,
-            FragmentShader::Celestial {
-                kind: self.kind,
-                time: self.time,
-            },
+        renderer.render(framebuffer, &body_uniforms, &self.mesh);
+    }
+}
+
+fn sphere_mesh() -> Mesh {
+    let row_size = LONGITUDE_SEGMENTS + 1;
+    let mut vertices = Vec::with_capacity((LATITUDE_SEGMENTS + 1) * row_size);
+    let mut indices = Vec::with_capacity(LATITUDE_SEGMENTS * LONGITUDE_SEGMENTS * 6);
+
+    for latitude in 0..=LATITUDE_SEGMENTS {
+        let phi = latitude as f32 / LATITUDE_SEGMENTS as f32 * PI;
+        for longitude in 0..=LONGITUDE_SEGMENTS {
+            let theta = longitude as f32 / LONGITUDE_SEGMENTS as f32 * TAU;
+            let normal = Vector3::new(phi.sin() * theta.cos(), phi.cos(), phi.sin() * theta.sin());
+            let mut vertex = Vertex::new(normal);
+            vertex.normal = normal;
+            vertices.push(vertex);
+        }
+    }
+
+    for latitude in 0..LATITUDE_SEGMENTS {
+        for longitude in 0..LONGITUDE_SEGMENTS {
+            let current = (latitude * row_size + longitude) as u32;
+            let next = current + row_size as u32;
+            indices.extend_from_slice(&[current, next, current + 1, current + 1, next, next + 1]);
+        }
+    }
+
+    Mesh {
+        vertices,
+        indices,
+        materials: vec![Material {
+            diffuse_texture: None,
+        }],
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn generated_sphere_has_the_expected_topology() {
+        let mesh = sphere_mesh();
+        assert_eq!(
+            mesh.vertices.len(),
+            (LATITUDE_SEGMENTS + 1) * (LONGITUDE_SEGMENTS + 1)
         );
+        assert_eq!(
+            mesh.indices.len(),
+            LATITUDE_SEGMENTS * LONGITUDE_SEGMENTS * 6
+        );
+        assert!(mesh
+            .vertices
+            .iter()
+            .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001));
     }
 }

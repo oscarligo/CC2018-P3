@@ -3,7 +3,7 @@ use crate::framebuffer::Framebuffer;
 use crate::load_objects::Mesh;
 use crate::projection::project_vertex;
 use crate::rasterizer::rasterize_indexed;
-use crate::shaders::{FragmentShader, fragment_shader, vertex_shader};
+use crate::shaders::{fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
 
@@ -14,13 +14,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn render(
-        &mut self,
-        framebuffer: &mut Framebuffer,
-        uniforms: &Uniforms,
-        mesh: &Mesh,
-        shader: FragmentShader,
-    ) {
+    pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
 
@@ -56,7 +50,7 @@ impl Renderer {
 
         // 3. Fragment Processing
         for fragment in &self.fragments {
-            let Some(color) = fragment_shader(fragment, &mesh.materials, shader) else {
+            let Some(color) = fragment_shader(fragment, &mesh.materials) else {
                 continue;
             };
 

@@ -3,8 +3,6 @@ use raylib::prelude::{Vector2, Vector3};
 #[derive(Clone, Debug)]
 pub struct Fragment {
     pub position: Vector2,
-    pub object_position: Vector3,
-    pub normal: Vector3,
     pub color: Vector3,
     pub depth: f32,
     pub tex_coord: Option<Vector2>,

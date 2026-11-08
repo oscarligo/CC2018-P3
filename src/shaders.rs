@@ -8,12 +8,6 @@ use raylib::prelude::*;
 const TRANSPARENCY_CUTOFF: u8 = 16;
 const COLOR_CHANNEL_MAX: f32 = 255.0;
 
-#[derive(Clone, Copy)]
-pub enum FragmentShader {
-    Material,
-    Celestial { kind: CelestialKind, time: f32 },
-}
-
 fn multiply_matrix_vector4(matrix: &Matrix, vector: &Vector4) -> Vector4 {
     Vector4::new(
         matrix.m0 * vector.x + matrix.m4 * vector.y + matrix.m8 * vector.z + matrix.m12 * vector.w,
@@ -26,28 +20,12 @@ fn multiply_matrix_vector4(matrix: &Matrix, vector: &Vector4) -> Vector4 {
 pub fn vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let position = Vector4::new(vertex.position.x, vertex.position.y, vertex.position.z, 1.0);
     let transformed = multiply_matrix_vector4(&uniforms.model_matrix, &position);
-    let normal = Vector4::new(vertex.normal.x, vertex.normal.y, vertex.normal.z, 0.0);
-    let transformed_normal = multiply_matrix_vector4(&uniforms.model_matrix, &normal);
-
     let mut result = *vertex;
     result.transformed_position = Vector3::new(transformed.x, transformed.y, transformed.z);
-    result.transformed_normal = Vector3::new(
-        transformed_normal.x,
-        transformed_normal.y,
-        transformed_normal.z,
-    )
-    .normalize();
     result
 }
 
-pub fn fragment_shader(
-    fragment: &Fragment,
-    materials: &[Material],
-    shader: FragmentShader,
-) -> Option<Vector3> {
-    if let FragmentShader::Celestial { kind, time } = shader {
-        return Some(celestial_shaders::shade(kind, fragment, time));
-    }
+pub fn fragment_shader(fragment: &Fragment, materials: &[Material]) -> Option<Vector3> {
     let Some(texture) = materials
         .get(fragment.material_index)
         .and_then(|material| material.diffuse_texture.as_ref())
@@ -70,4 +48,3 @@ pub fn fragment_shader(
         pixel[2] as f32 / COLOR_CHANNEL_MAX,
     ))
 }
-use crate::celestial_shaders::{self, CelestialKind};

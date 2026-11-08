@@ -1,10 +1,8 @@
 use super::color_mix;
-use crate::fragment::Fragment;
 use crate::noise::{fbm, smoothstep};
 use raylib::prelude::Vector3;
 
-pub fn shade(fragment: &Fragment, time: f32) -> Vector3 {
-    let point = fragment.object_position.normalize();
+pub fn shade(point: Vector3, time: f32) -> Vector3 {
     let flow = Vector3::new(time * 0.08, -time * 0.035, time * 0.05);
     let cells = fbm(point * 3.4 + flow, 4);
     let granules = fbm(point * 14.0 - flow * 1.7, 3);

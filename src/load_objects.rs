@@ -200,19 +200,3 @@ fn load_mtl(path: &Path) -> Result<Vec<(String, Material)>, Box<dyn std::error::
     finish_material(&mut materials, current_name, texture_path);
     Ok(materials)
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn provided_sphere_loads_with_normals_without_its_material_file() {
-        let mesh = load_obj("assets/sphere.obj").expect("sphere.obj should load");
-        assert!(!mesh.vertices.is_empty());
-        assert!(
-            mesh.vertices
-                .iter()
-                .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001)
-        );
-    }
-}
