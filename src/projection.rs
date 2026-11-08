@@ -64,6 +64,23 @@ pub fn sphere_is_visible(
         && dot(relative, up).abs() <= depth * vertical_slope + vertical_margin
 }
 
+pub fn projected_sphere_radius(
+    center: Vector3,
+    radius: f32,
+    uniforms: &Uniforms,
+    viewport_height: u32,
+) -> f32 {
+    let Some(forward) = normalize(uniforms.camera_target - uniforms.camera_pos) else {
+        return 0.0;
+    };
+    let depth = dot(center - uniforms.camera_pos, forward);
+    if depth <= NEAR_CLIP_DISTANCE {
+        return f32::INFINITY;
+    }
+    let focal_length = viewport_height as f32 * 0.5 / (VERTICAL_FOV * 0.5).tan();
+    radius * focal_length / depth
+}
+
 fn dot(a: Vector3, b: Vector3) -> f32 {
     a.x * b.x + a.y * b.y + a.z * b.z
 }
@@ -126,5 +143,13 @@ mod tests {
             800,
             600
         ));
+    }
+
+    #[test]
+    fn projected_radius_decreases_with_distance() {
+        let uniforms = uniforms();
+        let near = projected_sphere_radius(Vector3::new(0.0, 0.0, 10.0), 1.0, &uniforms, 600);
+        let far = projected_sphere_radius(Vector3::new(0.0, 0.0, 20.0), 1.0, &uniforms, 600);
+        assert!((near / far - 2.0).abs() < 0.001);
     }
 }
