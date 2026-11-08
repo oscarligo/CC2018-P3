@@ -1,6 +1,6 @@
 use raylib::prelude::{Vector2, Vector3};
 
-use crate::uniforms::Uniforms;
+use crate::rendering::uniforms::Uniforms;
 
 pub(crate) const NEAR_CLIP_DISTANCE: f32 = 1.0;
 const VERTICAL_FOV: f32 = 60.0_f32.to_radians();

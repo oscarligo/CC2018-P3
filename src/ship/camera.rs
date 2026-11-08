@@ -1,5 +1,5 @@
-use crate::input::InputState;
-use crate::uniforms::Uniforms;
+use crate::rendering::uniforms::Uniforms;
+use crate::ship::input::InputState;
 use raylib::prelude::{Matrix, Quaternion, Vector3};
 
 const INITIAL_DISTANCE_FACTOR: f32 = 2.6;

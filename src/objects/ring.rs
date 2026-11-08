@@ -1,9 +1,9 @@
-use crate::framebuffer::Framebuffer;
-use crate::load_objects::{Material, Mesh};
-use crate::render::Renderer;
-use crate::uniforms::Uniforms;
-use crate::vertex::Vertex;
-use crate::world::{Orbit, RenderPass, WorldObject, WorldTransform};
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::load_objects::{Material, Mesh};
+use crate::rendering::render::Renderer;
+use crate::rendering::uniforms::Uniforms;
+use crate::rendering::vertex::Vertex;
+use crate::scene::world::{Orbit, RenderPass, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::TAU;
 use std::sync::OnceLock;

@@ -1,11 +1,11 @@
-use crate::framebuffer::Framebuffer;
-use crate::load_objects::Mesh;
 use crate::performance::FrameMetrics;
-use crate::projection::{camera_depth, project_vertex};
-use crate::rasterizer::rasterize_indexed;
-use crate::shaders::{fragment_shader, vertex_shader};
-use crate::uniforms::Uniforms;
-use crate::vertex::Vertex;
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::load_objects::Mesh;
+use crate::rendering::projection::{camera_depth, project_vertex};
+use crate::rendering::rasterizer::rasterize_indexed;
+use crate::rendering::shaders::{fragment_shader, vertex_shader};
+use crate::rendering::uniforms::Uniforms;
+use crate::rendering::vertex::Vertex;
 use std::time::Instant;
 
 #[derive(Default)]

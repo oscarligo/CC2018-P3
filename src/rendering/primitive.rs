@@ -1,4 +1,4 @@
-use crate::vertex::Vertex;
+use crate::rendering::vertex::Vertex;
 
 pub fn primitive_assembly(transformed_vertices: &[Vertex]) -> Vec<[Vertex; 3]> {
     assert!(

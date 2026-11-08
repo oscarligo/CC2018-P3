@@ -1,11 +1,11 @@
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
-use crate::framebuffer::Framebuffer;
-use crate::load_objects::{Material, Mesh};
-use crate::projection::projected_sphere_radius;
-use crate::render::Renderer;
-use crate::uniforms::Uniforms;
-use crate::vertex::Vertex;
-use crate::world::{Orbit, WorldObject, WorldTransform, WorldUpdate};
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::load_objects::{Material, Mesh};
+use crate::rendering::projection::projected_sphere_radius;
+use crate::rendering::render::Renderer;
+use crate::rendering::uniforms::Uniforms;
+use crate::rendering::vertex::Vertex;
+use crate::scene::world::{Orbit, WorldObject, WorldTransform, WorldUpdate};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::{PI, TAU};
 use std::sync::OnceLock;
@@ -342,10 +342,11 @@ mod tests {
             mesh.indices.len(),
             HIGH_LATITUDE_SEGMENTS * HIGH_LONGITUDE_SEGMENTS * 6
         );
-        assert!(mesh
-            .vertices
-            .iter()
-            .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001));
+        assert!(
+            mesh.vertices
+                .iter()
+                .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001)
+        );
         assert!(mesh.indices.chunks_exact(3).all(|indices| {
             let a = mesh.vertices[indices[0] as usize].position;
             let b = mesh.vertices[indices[1] as usize].position;

@@ -1,7 +1,7 @@
-use crate::framebuffer::Framebuffer;
-use crate::projection::sphere_is_visible;
-use crate::render::Renderer;
-use crate::uniforms::Uniforms;
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::projection::sphere_is_visible;
+use crate::rendering::render::Renderer;
+use crate::rendering::uniforms::Uniforms;
 use raylib::prelude::Vector3;
 
 /// Estado espacial común para cualquier entidad del mundo.

@@ -1,7 +1,7 @@
-use crate::fragment::Fragment;
-use crate::load_objects::Material;
-use crate::uniforms::Uniforms;
-use crate::vertex::Vertex;
+use crate::rendering::fragment::Fragment;
+use crate::rendering::load_objects::Material;
+use crate::rendering::uniforms::Uniforms;
+use crate::rendering::vertex::Vertex;
 use raylib::prelude::*;
 
 // Shader constants

@@ -1,41 +1,22 @@
 mod celestial_shaders;
-mod follow_camera;
-mod fragment;
-mod framebuffer;
-mod input;
-mod load_objects;
 mod noise;
-mod performance;
 pub mod objects;
-pub mod planets;
-mod projection;
-mod rasterizer;
-mod render;
-mod rocket_audio;
-pub mod solar_system;
-mod shaders;
-mod ship_effects;
-mod ship_movement;
-mod starfield;
-mod triangle;
-mod uniforms;
-mod vertex;
-pub mod world;
+mod performance;
+mod rendering;
+mod scene;
+mod ship;
 
-use framebuffer::Framebuffer;
-use input::InputState;
 use objects::celestial::CelestialBody;
 use performance::PerformanceMonitor;
 use raylib::prelude::*;
-use render::Renderer;
-use rocket_audio::RocketAudio;
-use ship_movement::ShipMovement;
-use solar_system::build_solar_system;
-use starfield::Starfield;
+use rendering::framebuffer::Framebuffer;
+use rendering::render::Renderer;
+use rendering::uniforms::Uniforms;
+use scene::world::{World, WorldUpdate};
+use scene::{Starfield, build_solar_system};
+use ship::{InputState, RocketAudio, ShipMovement};
 use std::thread;
 use std::time::{Duration, Instant};
-use uniforms::Uniforms;
-use world::WorldUpdate;
 
 const WINDOW_WIDTH: i32 = 800;
 const WINDOW_HEIGHT: i32 = 600;
@@ -64,7 +45,7 @@ fn main() {
     let mut rocket_audio = RocketAudio::new(&audio);
 
     // Load the 3D object from an .obj file
-    let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
+    let mesh = rendering::load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut renderer = Renderer::default();
     let mut performance = PerformanceMonitor::default();
     let starfield = Starfield::new();
@@ -174,10 +155,10 @@ fn benchmark_object_count(args: impl IntoIterator<Item = String>) -> Result<Opti
     Ok(Some(count))
 }
 
-fn build_benchmark_world(object_count: usize) -> world::World {
+fn build_benchmark_world(object_count: usize) -> World {
     use celestial_shaders::CelestialKind;
 
-    let mut world = world::World::new();
+    let mut world = World::new();
     let columns = ((object_count as f32 * 4.0 / 3.0).sqrt().ceil() as usize).max(1);
     let rows = object_count.div_ceil(columns);
 

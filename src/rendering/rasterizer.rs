@@ -1,8 +1,8 @@
-use crate::fragment::Fragment;
-use crate::projection::{project_vertex, NEAR_CLIP_DISTANCE};
-use crate::triangle::{is_back_facing, triangle_scanline};
-use crate::uniforms::Uniforms;
-use crate::vertex::Vertex;
+use crate::rendering::fragment::Fragment;
+use crate::rendering::projection::{NEAR_CLIP_DISTANCE, project_vertex};
+use crate::rendering::triangle::{is_back_facing, triangle_scanline};
+use crate::rendering::uniforms::Uniforms;
+use crate::rendering::vertex::Vertex;
 
 pub struct RasterizationStats {
     pub culled_triangles: usize,

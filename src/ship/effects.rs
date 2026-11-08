@@ -1,6 +1,6 @@
-use crate::framebuffer::Framebuffer;
-use crate::projection::project_vertex;
-use crate::uniforms::Uniforms;
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::projection::project_vertex;
+use crate::rendering::uniforms::Uniforms;
 use raylib::prelude::*;
 
 const TRAIL_CAPACITY: usize = 64;

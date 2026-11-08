@@ -69,4 +69,3 @@ fn hash_3d(x: i32, y: i32, z: i32) -> f32 {
     value ^= value >> 16;
     (value & 0x7fff_ffff) as f32 / 2_147_483_647.0
 }
-

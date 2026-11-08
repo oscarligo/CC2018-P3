@@ -1,0 +1,10 @@
+pub(crate) mod fragment;
+pub(crate) mod framebuffer;
+pub(crate) mod load_objects;
+pub(crate) mod projection;
+pub(crate) mod rasterizer;
+pub(crate) mod render;
+pub(crate) mod shaders;
+pub(crate) mod triangle;
+pub(crate) mod uniforms;
+pub(crate) mod vertex;

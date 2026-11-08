@@ -1,5 +1,5 @@
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
-use crate::world::{Orbit, World};
+use crate::scene::world::{Orbit, World};
 use raylib::prelude::Vector3;
 
 pub mod atmosphere;

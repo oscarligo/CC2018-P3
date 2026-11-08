@@ -1,4 +1,4 @@
-use crate::world::World;
+use crate::scene::world::World;
 
 /// Register all planets in the world.
 pub fn register_all(_world: &mut World) {

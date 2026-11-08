@@ -1,9 +1,9 @@
-use crate::follow_camera::FollowCamera;
-use crate::framebuffer::Framebuffer;
-use crate::input::InputState;
-use crate::load_objects::Mesh;
-use crate::ship_effects::ShipEffects;
-use crate::uniforms::Uniforms;
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::load_objects::Mesh;
+use crate::rendering::uniforms::Uniforms;
+use crate::ship::camera::FollowCamera;
+use crate::ship::effects::ShipEffects;
+use crate::ship::input::InputState;
 use raylib::prelude::*;
 
 const MAX_SHIP_PITCH_TILT: f32 = 16.0_f32.to_radians();

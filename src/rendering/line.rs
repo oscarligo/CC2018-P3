@@ -1,5 +1,5 @@
-use crate::fragment::Fragment;
-use crate::vertex::Vertex;
+use crate::rendering::fragment::Fragment;
+use crate::rendering::vertex::Vertex;
 use raylib::prelude::Vector2;
 
 // bresenham's line algorithm

@@ -126,10 +126,12 @@ mod tests {
         framebuffer.clear();
 
         assert_eq!(pixels, framebuffer.pixels.as_ptr());
-        assert!(framebuffer
-            .pixels
-            .chunks_exact(CHANNELS_PER_PIXEL)
-            .all(|pixel| pixel == [1, 2, 3, 255]));
+        assert!(
+            framebuffer
+                .pixels
+                .chunks_exact(CHANNELS_PER_PIXEL)
+                .all(|pixel| pixel == [1, 2, 3, 255])
+        );
     }
 
     #[test]

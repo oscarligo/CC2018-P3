@@ -1,4 +1,4 @@
-use crate::vertex::Vertex;
+use crate::rendering::vertex::Vertex;
 use image::RgbaImage;
 use raylib::prelude::{Vector2, Vector3};
 use std::collections::HashMap;

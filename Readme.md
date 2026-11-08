@@ -1,5 +1,15 @@
 # CC2018 - P3
 
+## Estructura de `src`
+
+- `celestial_shaders/`: apariencia procedural de estrellas y planetas.
+- `objects/`: cuerpos y elementos renderizables del sistema solar.
+- `rendering/`: framebuffer, geometría, proyección, shaders y rasterización.
+- `scene/`: mundo, catálogo de planetas, sistema solar y fondo estelar.
+- `ship/`: controles, movimiento, cámara, efectos y audio de la nave.
+- `main.rs`: ciclo de ejecución y benchmark.
+- `noise.rs` y `performance.rs`: utilidades transversales.
+
 ## Ejecución
 
 La nave recorre el espacio siguiendo su orientación y la cámara mantiene su centro a la vista, incluso durante giros completos o vuelo invertido. Los objetos conservan sus posiciones en el mundo: al acercarte aumentan de tamaño y al pasar a su lado se desplazan en pantalla.

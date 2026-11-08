@@ -133,12 +133,7 @@ impl<'audio> RocketAudio<'audio> {
             FLYING_FADE_OUT_SPEED,
             frame_time,
         );
-        self.update_moving(
-            thrust && !braking,
-            can_accelerate,
-            speed_ratio,
-            frame_time,
-        );
+        self.update_moving(thrust && !braking, can_accelerate, speed_ratio, frame_time);
     }
 
     fn update_moving(

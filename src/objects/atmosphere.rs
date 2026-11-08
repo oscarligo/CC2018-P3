@@ -1,8 +1,8 @@
-use super::celestial::{sphere_mesh, SphereLod};
-use crate::framebuffer::Framebuffer;
-use crate::render::Renderer;
-use crate::uniforms::Uniforms;
-use crate::world::{Orbit, RenderPass, WorldObject, WorldTransform};
+use super::celestial::{SphereLod, sphere_mesh};
+use crate::rendering::framebuffer::Framebuffer;
+use crate::rendering::render::Renderer;
+use crate::rendering::uniforms::Uniforms;
+use crate::scene::world::{Orbit, RenderPass, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 
 pub struct Atmosphere {
