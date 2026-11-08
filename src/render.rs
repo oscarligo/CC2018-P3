@@ -35,6 +35,10 @@ impl Renderer {
         self.metrics.surface_update += elapsed;
     }
 
+    pub fn record_lod_switch(&mut self) {
+        self.metrics.lod_switches += 1;
+    }
+
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
         self.render_internal(framebuffer, uniforms, mesh, None);
     }

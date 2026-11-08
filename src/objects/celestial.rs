@@ -19,8 +19,10 @@ const MEDIUM_LATITUDE_SEGMENTS: usize = 18;
 const MEDIUM_LONGITUDE_SEGMENTS: usize = 27;
 const LOW_LATITUDE_SEGMENTS: usize = 8;
 const LOW_LONGITUDE_SEGMENTS: usize = 12;
-const HIGH_LOD_RADIUS: f32 = 150.0;
-const MEDIUM_LOD_RADIUS: f32 = 40.0;
+const HIGH_LOD_ENTER_RADIUS: f32 = 165.0;
+const HIGH_LOD_EXIT_RADIUS: f32 = 135.0;
+const MEDIUM_LOD_ENTER_RADIUS: f32 = 45.0;
+const MEDIUM_LOD_EXIT_RADIUS: f32 = 35.0;
 const MEDIUM_UPDATE_INTERVAL: f32 = 1.0 / 30.0;
 const LOW_UPDATE_INTERVAL: f32 = 1.0 / 10.0;
 
@@ -89,21 +91,24 @@ impl CelestialBody {
         }
     }
 
-    fn select_lod(&mut self, projected_radius: f32) {
-        let lod = if projected_radius >= HIGH_LOD_RADIUS {
-            SphereLod::High
-        } else if projected_radius >= MEDIUM_LOD_RADIUS {
-            SphereLod::Medium
-        } else {
-            SphereLod::Low
+    fn select_lod(&mut self, projected_radius: f32) -> bool {
+        let lod = match self.lod {
+            SphereLod::High if projected_radius < MEDIUM_LOD_EXIT_RADIUS => SphereLod::Low,
+            SphereLod::High if projected_radius < HIGH_LOD_EXIT_RADIUS => SphereLod::Medium,
+            SphereLod::Medium if projected_radius >= HIGH_LOD_ENTER_RADIUS => SphereLod::High,
+            SphereLod::Medium if projected_radius < MEDIUM_LOD_EXIT_RADIUS => SphereLod::Low,
+            SphereLod::Low if projected_radius >= HIGH_LOD_ENTER_RADIUS => SphereLod::High,
+            SphereLod::Low if projected_radius >= MEDIUM_LOD_ENTER_RADIUS => SphereLod::Medium,
+            lod => lod,
         };
         if lod == self.lod {
-            return;
+            return false;
         }
         self.lod = lod;
         self.colors
             .resize(sphere_mesh(lod).vertices.len(), Vector3::zero());
         self.surface_dirty = true;
+        true
     }
 
     fn surface_update_interval(&self) -> f32 {
@@ -159,7 +164,9 @@ impl WorldObject for CelestialBody {
             .max(self.transform.scale.z.abs());
         let radius =
             projected_sphere_radius(self.transform.position, scale, uniforms, framebuffer.height);
-        self.select_lod(radius);
+        if self.select_lod(radius) {
+            renderer.record_lod_switch();
+        }
         let surface_start = Instant::now();
         if self.update_surface_if_needed() {
             renderer.record_surface_update(surface_start.elapsed());
@@ -272,14 +279,29 @@ mod tests {
     #[test]
     fn lod_selection_uses_projected_size() {
         let mut body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero());
-        body.select_lod(MEDIUM_LOD_RADIUS);
+        body.select_lod(MEDIUM_LOD_ENTER_RADIUS);
         assert_eq!(body.lod, SphereLod::Medium);
-        body.select_lod(HIGH_LOD_RADIUS);
+        body.select_lod(HIGH_LOD_ENTER_RADIUS);
         assert_eq!(body.lod, SphereLod::High);
         assert_eq!(
             body.colors.len(),
             sphere_mesh(SphereLod::High).vertices.len()
         );
+    }
+
+    #[test]
+    fn lod_hysteresis_prevents_threshold_oscillation() {
+        let mut body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero());
+        assert!(!body.select_lod(MEDIUM_LOD_ENTER_RADIUS - 1.0));
+        assert!(body.select_lod(MEDIUM_LOD_ENTER_RADIUS));
+        assert!(!body.select_lod(MEDIUM_LOD_EXIT_RADIUS + 1.0));
+        assert!(body.select_lod(MEDIUM_LOD_EXIT_RADIUS - 1.0));
+
+        body.select_lod(HIGH_LOD_ENTER_RADIUS);
+        assert_eq!(body.lod, SphereLod::High);
+        assert!(!body.select_lod(HIGH_LOD_EXIT_RADIUS + 1.0));
+        assert!(body.select_lod(HIGH_LOD_EXIT_RADIUS - 1.0));
+        assert_eq!(body.lod, SphereLod::Medium);
     }
 
     #[test]

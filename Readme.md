@@ -27,3 +27,5 @@ Cada 120 frames se imprime en la terminal un reporte con tiempo promedio y p95 d
 Los objetos del mundo se renderizan de adelante hacia atrás para maximizar los descartes tempranos del depth buffer.
 
 Los triángulos que atraviesan el plano cercano de la cámara se recortan conservando sus colores, UV y materiales.
+
+Los cambios de LOD usan umbrales distintos de entrada y salida para evitar oscilaciones cuando un cuerpo permanece cerca de un límite.

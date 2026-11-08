@@ -19,6 +19,7 @@ pub struct FrameMetrics {
     pub objects: usize,
     pub culled_objects: usize,
     pub surface_updates: usize,
+    pub lod_switches: usize,
 }
 
 #[derive(Default)]
@@ -52,7 +53,7 @@ impl PerformanceMonitor {
         let frame = average(|sample| sample.frame);
 
         eprintln!(
-            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | surface {:.2} ms | vertex {:.2} ms | raster+shade {:.2} ms | objects {:.0} | objects culled {:.0} | surfaces updated {:.1} | triangles {:.0} | culled {:.0} | near clipped {:.0} | near rejected {:.0} | covered {:.0} | depth rejected {:.0} | shaded {:.0}",
+            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | surface {:.2} ms | vertex {:.2} ms | raster+shade {:.2} ms | objects {:.0} | objects culled {:.0} | surfaces updated {:.1} | LOD switches {:.1} | triangles {:.0} | culled {:.0} | near clipped {:.0} | near rejected {:.0} | covered {:.0} | depth rejected {:.0} | shaded {:.0}",
             1000.0 / frame.max(f64::EPSILON),
             frame,
             p95,
@@ -63,6 +64,7 @@ impl PerformanceMonitor {
             average_count(|sample| sample.objects),
             average_count(|sample| sample.culled_objects),
             average_count(|sample| sample.surface_updates),
+            average_count(|sample| sample.lod_switches),
             average_count(|sample| sample.triangles),
             average_count(|sample| sample.culled_triangles),
             average_count(|sample| sample.near_clipped_triangles),
