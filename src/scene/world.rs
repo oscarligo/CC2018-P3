@@ -15,7 +15,13 @@ struct AnchorState {
     local_position: Vector3,
     local_rotation: Quaternion,
     local_scale: Vector3,
-    parent: Option<TransformAnchor>,
+    parent: Option<(TransformAnchor, ParentMode)>,
+}
+
+#[derive(Clone, Copy)]
+enum ParentMode {
+    Full,
+    TranslationOnly,
 }
 
 #[derive(Clone, Copy)]
@@ -48,16 +54,23 @@ impl TransformAnchor {
                 rotation: local_rotation,
                 scale: local_scale,
             },
-            |parent| {
+            |(parent, mode)| {
                 let parent = parent.world_pose();
-                WorldPose {
-                    position: parent.position
-                        + transform_direction(
-                            &parent.rotation.to_matrix(),
-                            multiply_components(local_position, parent.scale),
-                        ),
-                    rotation: (parent.rotation * local_rotation).normalize(),
-                    scale: multiply_components(parent.scale, local_scale),
+                match mode {
+                    ParentMode::Full => WorldPose {
+                        position: parent.position
+                            + transform_direction(
+                                &parent.rotation.to_matrix(),
+                                multiply_components(local_position, parent.scale),
+                            ),
+                        rotation: (parent.rotation * local_rotation).normalize(),
+                        scale: multiply_components(parent.scale, local_scale),
+                    },
+                    ParentMode::TranslationOnly => WorldPose {
+                        position: parent.position + local_position,
+                        rotation: local_rotation,
+                        scale: local_scale,
+                    },
                 }
             },
         )
@@ -79,11 +92,9 @@ impl TransformAnchor {
     }
 
     fn parent_pose(&self) -> Option<WorldPose> {
-        self.0
-            .borrow()
-            .parent
-            .clone()
-            .map(|parent| parent.world_pose())
+        self.0.borrow().parent.clone().and_then(|(parent, mode)| {
+            (matches!(mode, ParentMode::Full)).then(|| parent.world_pose())
+        })
     }
 
     fn set_world_scale_preserving_parent(&self, scale: Vector3) {
@@ -108,7 +119,7 @@ impl TransformAnchor {
             .borrow()
             .parent
             .as_ref()
-            .is_some_and(|parent| parent.contains(target))
+            .is_some_and(|(parent, _)| parent.contains(target))
     }
 
     fn set_local_position(&self, position: Vector3) {
@@ -119,8 +130,8 @@ impl TransformAnchor {
         self.0.borrow().local_position
     }
 
-    fn set_parent(&self, parent: Option<Self>) {
-        if let Some(parent) = &parent {
+    fn set_parent(&self, parent: Option<(Self, ParentMode)>) {
+        if let Some((parent, _)) = &parent {
             assert!(
                 !parent.contains(self),
                 "a transform cannot be attached to itself or one of its children"
@@ -168,6 +179,7 @@ pub struct WorldTransform {
     pub velocity: Vector3,
     pub scale: Vector3,
     orbit: Option<Orbit>,
+    local_orbit: Option<LocalOrbit>,
     orbit_time: f32,
     anchor: TransformAnchor,
 }
@@ -178,6 +190,24 @@ pub struct Orbit {
     initial_offset: Vector3,
     axis: Vector3,
     angular_speed: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct LocalOrbit(Orbit);
+
+impl LocalOrbit {
+    pub fn new(initial_offset: Vector3, axis: Vector3, angular_speed: f32) -> Self {
+        Self(Orbit::new(
+            Vector3::zero(),
+            initial_offset,
+            axis,
+            angular_speed,
+        ))
+    }
+
+    fn position(&self, time: f32) -> Vector3 {
+        self.0.position(time)
+    }
 }
 
 impl Orbit {
@@ -217,6 +247,7 @@ impl WorldTransform {
             velocity: Vector3::zero(),
             scale,
             orbit: None,
+            local_orbit: None,
             orbit_time: 0.0,
             anchor: TransformAnchor::new(position, scale),
         }
@@ -228,12 +259,24 @@ impl WorldTransform {
 
     pub(crate) fn set_parent(&mut self, parent: TransformAnchor, local_position: Vector3) {
         self.orbit = None;
+        self.local_orbit = None;
         self.orbit_time = 0.0;
         self.anchor.set_local_position(local_position);
-        self.anchor.set_parent(Some(parent));
+        self.anchor.set_parent(Some((parent, ParentMode::Full)));
         self.anchor.set_world_scale_preserving_parent(self.scale);
         self.anchor
             .set_world_rotation_preserving_parent(self.rotation);
+        self.resolve_world_transform();
+    }
+
+    pub(crate) fn set_parent_orbit(&mut self, parent: TransformAnchor, orbit: LocalOrbit) {
+        self.orbit = None;
+        self.local_orbit = Some(orbit);
+        self.orbit_time = 0.0;
+        self.anchor
+            .set_local_pose(orbit.position(0.0), self.rotation, self.scale);
+        self.anchor
+            .set_parent(Some((parent, ParentMode::TranslationOnly)));
         self.resolve_world_transform();
     }
 
@@ -250,6 +293,7 @@ impl WorldTransform {
     pub fn set_orbit(&mut self, orbit: Orbit) {
         self.anchor.set_parent(None);
         self.orbit = Some(orbit);
+        self.local_orbit = None;
         self.orbit_time = 0.0;
         self.position = orbit.position(0.0);
         self.anchor
@@ -258,6 +302,11 @@ impl WorldTransform {
 
     fn advance(&mut self, update: &WorldUpdate) {
         if self.anchor.has_parent() {
+            if let Some(orbit) = self.local_orbit {
+                self.orbit_time += update.frame_time;
+                self.anchor
+                    .set_local_position(orbit.position(self.orbit_time));
+            }
             let local_position = self.anchor.local_position() + self.velocity * update.frame_time;
             self.anchor.set_local_position(local_position);
             return;
@@ -716,6 +765,38 @@ mod tests {
         let child_forward =
             transform_direction(&child.rotation.to_matrix(), Vector3::new(0.0, 0.0, 1.0));
         assert!((child_forward - Vector3::new(1.0, 0.0, 0.0)).length() < 0.0001);
+    }
+
+    #[test]
+    fn local_orbit_follows_translation_without_inheriting_spin_or_scale() {
+        let mut parent =
+            WorldTransform::new(Vector3::new(10.0, 0.0, 0.0), Vector3::new(1.0, 1.0, 1.0));
+        parent.set_local_rotation(Quaternion::from_axis_angle(
+            Vector3::new(0.0, 1.0, 0.0),
+            PI / 2.0,
+        ));
+        parent.set_local_scale(Vector3::new(4.0, 4.0, 4.0));
+        parent.velocity = Vector3::new(2.0, 0.0, 0.0);
+        let mut satellite = WorldTransform::new(Vector3::zero(), Vector3::new(2.0, 2.0, 2.0));
+        satellite.set_parent_orbit(
+            parent.anchor(),
+            LocalOrbit::new(
+                Vector3::new(3.0, 0.0, 0.0),
+                Vector3::new(0.0, 1.0, 0.0),
+                0.5,
+            ),
+        );
+        let update = WorldUpdate { frame_time: 1.0 };
+
+        satellite.advance(&update);
+        parent.advance(&update);
+        parent.resolve_world_transform();
+        satellite.resolve_world_transform();
+
+        assert!(((satellite.position - parent.position).length() - 3.0).abs() < 0.0001);
+        assert_eq!(satellite.scale, Vector3::new(2.0, 2.0, 2.0));
+        assert!((satellite.rotation.w - 1.0).abs() < 0.0001);
+        assert!((satellite.position.z.abs()) > 0.1);
     }
 
     #[test]

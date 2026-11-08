@@ -7,7 +7,9 @@ use crate::rendering::projection::projected_sphere_radius;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
-use crate::scene::world::{Orbit, WorldObject, WorldTransform, WorldUpdate};
+use crate::scene::world::{
+    LocalOrbit, Orbit, TransformAnchor, WorldObject, WorldTransform, WorldUpdate,
+};
 use raylib::prelude::{Matrix, Quaternion, Vector3};
 use std::f32::consts::{PI, TAU};
 use std::sync::OnceLock;
@@ -147,6 +149,11 @@ impl CelestialBody {
 
     pub fn with_orbit(mut self, orbit: Orbit) -> Self {
         self.transform.set_orbit(orbit);
+        self
+    }
+
+    pub(crate) fn with_parent_orbit(mut self, parent: TransformAnchor, orbit: LocalOrbit) -> Self {
+        self.transform.set_parent_orbit(parent, orbit);
         self
     }
 
