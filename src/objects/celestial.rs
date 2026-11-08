@@ -80,6 +80,10 @@ impl WorldObject for CelestialBody {
         self.update_surface();
     }
 
+    fn bounding_radius(&self) -> Option<f32> {
+        Some(1.0)
+    }
+
     fn draw(
         &mut self,
         renderer: &mut Renderer,

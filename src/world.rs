@@ -1,4 +1,5 @@
 use crate::framebuffer::Framebuffer;
+use crate::projection::sphere_is_visible;
 use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use raylib::prelude::Vector3;
@@ -34,6 +35,9 @@ pub trait WorldObject {
     fn transform(&self) -> &WorldTransform;
     fn transform_mut(&mut self) -> &mut WorldTransform;
     fn update(&mut self, _update: &WorldUpdate) {}
+    fn bounding_radius(&self) -> Option<f32> {
+        None
+    }
     fn draw(&mut self, renderer: &mut Renderer, framebuffer: &mut Framebuffer, uniforms: &Uniforms);
 }
 
@@ -65,6 +69,26 @@ impl World {
         uniforms: &Uniforms,
     ) {
         for object in &mut self.objects {
+            let culled = object.bounding_radius().is_some_and(|local_radius| {
+                let transform = object.transform();
+                let scale = transform
+                    .scale
+                    .x
+                    .abs()
+                    .max(transform.scale.y.abs())
+                    .max(transform.scale.z.abs());
+                !sphere_is_visible(
+                    transform.position,
+                    local_radius * scale,
+                    uniforms,
+                    framebuffer.width,
+                    framebuffer.height,
+                )
+            });
+            renderer.record_object(culled);
+            if culled {
+                continue;
+            }
             object.draw(renderer, framebuffer, uniforms);
         }
     }

@@ -23,6 +23,13 @@ impl Renderer {
         self.metrics
     }
 
+    pub fn record_object(&mut self, culled: bool) {
+        self.metrics.objects += 1;
+        if culled {
+            self.metrics.culled_objects += 1;
+        }
+    }
+
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;

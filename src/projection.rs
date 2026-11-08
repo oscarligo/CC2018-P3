@@ -1,5 +1,7 @@
 use raylib::prelude::{Vector2, Vector3};
 
+use crate::uniforms::Uniforms;
+
 const NEAR_CLIP_DISTANCE: f32 = 1.0;
 const VERTICAL_FOV: f32 = 60.0_f32.to_radians();
 
@@ -30,6 +32,38 @@ pub fn project_vertex(
     Some((Vector2::new(x, y), depth))
 }
 
+pub fn sphere_is_visible(
+    center: Vector3,
+    radius: f32,
+    uniforms: &Uniforms,
+    width: u32,
+    height: u32,
+) -> bool {
+    if width == 0 || height == 0 {
+        return false;
+    }
+    let Some(forward) = normalize(uniforms.camera_target - uniforms.camera_pos) else {
+        return false;
+    };
+    let Some(right) = normalize(cross(uniforms.camera_up, forward)) else {
+        return false;
+    };
+    let up = cross(forward, right);
+    let relative = center - uniforms.camera_pos;
+    let depth = dot(relative, forward);
+    if depth + radius <= NEAR_CLIP_DISTANCE {
+        return false;
+    }
+
+    let vertical_slope = (VERTICAL_FOV * 0.5).tan();
+    let horizontal_slope = vertical_slope * width as f32 / height as f32;
+    let horizontal_margin = radius * (1.0 + horizontal_slope * horizontal_slope).sqrt();
+    let vertical_margin = radius * (1.0 + vertical_slope * vertical_slope).sqrt();
+
+    dot(relative, right).abs() <= depth * horizontal_slope + horizontal_margin
+        && dot(relative, up).abs() <= depth * vertical_slope + vertical_margin
+}
+
 fn dot(a: Vector3, b: Vector3) -> f32 {
     a.x * b.x + a.y * b.y + a.z * b.z
 }
@@ -45,4 +79,52 @@ fn cross(a: Vector3, b: Vector3) -> Vector3 {
 fn normalize(vector: Vector3) -> Option<Vector3> {
     let length = dot(vector, vector).sqrt();
     (length > f32::EPSILON).then(|| vector * (1.0 / length))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use raylib::prelude::Matrix;
+
+    fn uniforms() -> Uniforms {
+        Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: Vector3::zero(),
+            camera_target: Vector3::new(0.0, 0.0, 1.0),
+            camera_up: Vector3::new(0.0, 1.0, 0.0),
+        }
+    }
+
+    #[test]
+    fn sphere_visibility_is_conservative_at_frustum_edges() {
+        let uniforms = uniforms();
+        assert!(sphere_is_visible(
+            Vector3::new(0.0, 0.0, 10.0),
+            1.0,
+            &uniforms,
+            800,
+            600
+        ));
+        assert!(sphere_is_visible(
+            Vector3::new(8.0, 0.0, 10.0),
+            1.0,
+            &uniforms,
+            800,
+            600
+        ));
+        assert!(!sphere_is_visible(
+            Vector3::new(20.0, 0.0, 10.0),
+            1.0,
+            &uniforms,
+            800,
+            600
+        ));
+        assert!(!sphere_is_visible(
+            Vector3::new(0.0, 0.0, -2.0),
+            0.5,
+            &uniforms,
+            800,
+            600
+        ));
+    }
 }
