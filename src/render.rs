@@ -31,6 +31,27 @@ impl Renderer {
     }
 
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
+        self.render_internal(framebuffer, uniforms, mesh, None);
+    }
+
+    pub fn render_colored(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        colors: &[raylib::prelude::Vector3],
+    ) {
+        assert_eq!(colors.len(), mesh.vertices.len());
+        self.render_internal(framebuffer, uniforms, mesh, Some(colors));
+    }
+
+    fn render_internal(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        colors: Option<&[raylib::prelude::Vector3]>,
+    ) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
 
@@ -38,8 +59,11 @@ impl Renderer {
         let stage_start = Instant::now();
         self.transformed_vertices.clear();
         self.transformed_vertices
-            .extend(mesh.vertices.iter().map(|vertex| {
+            .extend(mesh.vertices.iter().enumerate().map(|(index, vertex)| {
                 let mut transformed = vertex_shader(vertex, uniforms);
+                if let Some(colors) = colors {
+                    transformed.color = colors[index];
+                }
                 if let Some((screen_position, depth)) = project_vertex(
                     transformed.transformed_position,
                     uniforms.camera_pos,

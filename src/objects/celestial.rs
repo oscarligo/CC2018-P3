@@ -7,6 +7,7 @@ use crate::vertex::Vertex;
 use crate::world::{WorldObject, WorldTransform, WorldUpdate};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::{PI, TAU};
+use std::sync::OnceLock;
 
 const BODY_SCALE: f32 = 165.0;
 const ROTATION_SPEED: f32 = 0.08;
@@ -14,7 +15,7 @@ const LATITUDE_SEGMENTS: usize = 36;
 const LONGITUDE_SEGMENTS: usize = 54;
 
 pub struct CelestialBody {
-    mesh: Mesh,
+    colors: Vec<Vector3>,
     pub(crate) transform: WorldTransform,
     kind: CelestialKind,
     rotation: f32,
@@ -23,8 +24,9 @@ pub struct CelestialBody {
 
 impl CelestialBody {
     pub fn new(kind: CelestialKind, position: Vector3) -> Self {
+        let mesh = sphere_mesh();
         let mut body = Self {
-            mesh: sphere_mesh(),
+            colors: vec![Vector3::zero(); mesh.vertices.len()],
             transform: WorldTransform::new(
                 position,
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
@@ -52,15 +54,14 @@ impl CelestialBody {
 
     fn update_surface(&mut self) {
         let (sin_rotation, cos_rotation) = self.rotation.sin_cos();
-        for vertex in &mut self.mesh.vertices {
+        for (color, vertex) in self.colors.iter_mut().zip(&sphere_mesh().vertices) {
             let point = vertex.normal;
             let world_normal = Vector3::new(
                 point.x * cos_rotation + point.z * sin_rotation,
                 point.y,
                 -point.x * sin_rotation + point.z * cos_rotation,
             );
-            vertex.color =
-                crate::celestial_shaders::shade(self.kind, point, world_normal, self.time);
+            *color = crate::celestial_shaders::shade(self.kind, point, world_normal, self.time);
         }
     }
 }
@@ -96,11 +97,16 @@ impl WorldObject for CelestialBody {
             camera_target: uniforms.camera_target,
             camera_up: uniforms.camera_up,
         };
-        renderer.render(framebuffer, &body_uniforms, &self.mesh);
+        renderer.render_colored(framebuffer, &body_uniforms, sphere_mesh(), &self.colors);
     }
 }
 
-fn sphere_mesh() -> Mesh {
+fn sphere_mesh() -> &'static Mesh {
+    static SPHERE: OnceLock<Mesh> = OnceLock::new();
+    SPHERE.get_or_init(build_sphere_mesh)
+}
+
+fn build_sphere_mesh() -> Mesh {
     let row_size = LONGITUDE_SEGMENTS + 1;
     let mut vertices = Vec::with_capacity((LATITUDE_SEGMENTS + 1) * row_size);
     let mut indices = Vec::with_capacity(LATITUDE_SEGMENTS * LONGITUDE_SEGMENTS * 6);
@@ -159,5 +165,12 @@ mod tests {
             let face_normal = (b - a).cross(c - a);
             face_normal.length() < 0.001 || face_normal.dot(a + b + c) > 0.0
         }));
+    }
+
+    #[test]
+    fn celestial_bodies_share_the_same_geometry() {
+        assert!(std::ptr::eq(sphere_mesh(), sphere_mesh()));
+        let body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero());
+        assert_eq!(body.colors.len(), sphere_mesh().vertices.len());
     }
 }
