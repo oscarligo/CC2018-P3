@@ -3,7 +3,7 @@ use crate::rendering::load_objects::{Material, Mesh};
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
-use crate::scene::world::{Orbit, RenderPass, WorldObject, WorldTransform};
+use crate::scene::world::{RenderPass, TransformAnchor, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::TAU;
 use std::sync::OnceLock;
@@ -30,8 +30,8 @@ impl PlanetRing {
         }
     }
 
-    pub fn with_orbit(mut self, orbit: Orbit) -> Self {
-        self.transform.set_orbit(orbit);
+    pub(crate) fn attached_to(mut self, parent: TransformAnchor, local_position: Vector3) -> Self {
+        self.transform.set_parent(parent, local_position);
         self
     }
 

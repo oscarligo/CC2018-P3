@@ -25,7 +25,7 @@ pub fn register_all(_world: &mut World) {
         0.018,
     );
 
-    _world.add(celestial::CelestialBody::new_primary_star_styled(
+    let sun = celestial::CelestialBody::new_primary_star_styled(
         sun_position,
         CelestialStyle {
             noise_offset: Vector3::new(2.1, -0.7, 1.4),
@@ -33,35 +33,38 @@ pub fn register_all(_world: &mut World) {
             animation_speed: 1.15,
             ..CelestialStyle::default()
         },
-    ));
-    _world.add(
-        celestial::CelestialBody::styled(
-            CelestialKind::Rocky,
-            rocky_position,
-            CelestialStyle {
-                noise_offset: Vector3::new(-3.4, 1.8, 0.6),
-                tint: Vector3::new(0.82, 1.0, 1.08),
-                cloud_threshold: 0.64,
-                rotation_speed: 0.055,
-                ..CelestialStyle::default()
-            },
-        )
-        .with_orbit(rocky_orbit),
     );
-    _world.add(
-        celestial::CelestialBody::styled(
-            CelestialKind::GasGiant,
-            gas_position,
-            CelestialStyle {
-                noise_offset: Vector3::new(4.2, 0.9, -2.7),
-                tint: Vector3::new(1.08, 0.88, 0.72),
-                animation_speed: 0.75,
-                rotation_speed: 0.11,
-                ..CelestialStyle::default()
-            },
-        )
-        .with_orbit(gas_orbit),
-    );
+    let sun_anchor = sun.transform.anchor();
+    let rocky = celestial::CelestialBody::styled(
+        CelestialKind::Rocky,
+        rocky_position,
+        CelestialStyle {
+            noise_offset: Vector3::new(-3.4, 1.8, 0.6),
+            tint: Vector3::new(0.82, 1.0, 1.08),
+            cloud_threshold: 0.64,
+            rotation_speed: 0.055,
+            ..CelestialStyle::default()
+        },
+    )
+    .with_orbit(rocky_orbit);
+    let rocky_anchor = rocky.transform.anchor();
+    let gas = celestial::CelestialBody::styled(
+        CelestialKind::GasGiant,
+        gas_position,
+        CelestialStyle {
+            noise_offset: Vector3::new(4.2, 0.9, -2.7),
+            tint: Vector3::new(1.08, 0.88, 0.72),
+            animation_speed: 0.75,
+            rotation_speed: 0.11,
+            ..CelestialStyle::default()
+        },
+    )
+    .with_orbit(gas_orbit);
+    let gas_anchor = gas.transform.anchor();
+
+    _world.add(sun);
+    _world.add(rocky);
+    _world.add(gas);
     _world.add(
         atmosphere::Atmosphere::new(
             sun_position,
@@ -70,15 +73,18 @@ pub fn register_all(_world: &mut World) {
             Vector3::new(1.0, 0.34, 0.04),
             0.1,
         )
-        .with_orbit(rocky_orbit),
+        .attached_to(sun_anchor, Vector3::zero()),
     );
-    _world.add(atmosphere::Atmosphere::new(
-        rocky_position,
-        BODY_SCALE,
-        1.07,
-        Vector3::new(0.16, 0.52, 1.0),
-        0.1,
-    ));
+    _world.add(
+        atmosphere::Atmosphere::new(
+            rocky_position,
+            BODY_SCALE,
+            1.07,
+            Vector3::new(0.16, 0.52, 1.0),
+            0.1,
+        )
+        .attached_to(rocky_anchor, Vector3::zero()),
+    );
     _world.add(
         atmosphere::Atmosphere::new(
             gas_position,
@@ -87,10 +93,11 @@ pub fn register_all(_world: &mut World) {
             Vector3::new(1.0, 0.58, 0.18),
             0.10,
         )
-        .with_orbit(gas_orbit),
+        .attached_to(gas_anchor.clone(), Vector3::zero()),
     );
     _world.add(
-        ring::PlanetRing::new(gas_position, BODY_SCALE * 2.1, 0.34, -0.12).with_orbit(gas_orbit),
+        ring::PlanetRing::new(gas_position, BODY_SCALE * 2.1, 0.34, -0.12)
+            .attached_to(gas_anchor, Vector3::zero()),
     );
 }
 

@@ -2,7 +2,7 @@ use super::celestial::{SphereLod, sphere_mesh};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
-use crate::scene::world::{Orbit, RenderPass, WorldObject, WorldTransform};
+use crate::scene::world::{RenderPass, TransformAnchor, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 
 pub struct Atmosphere {
@@ -36,8 +36,8 @@ impl Atmosphere {
         }
     }
 
-    pub fn with_orbit(mut self, orbit: Orbit) -> Self {
-        self.transform.set_orbit(orbit);
+    pub(crate) fn attached_to(mut self, parent: TransformAnchor, local_position: Vector3) -> Self {
+        self.transform.set_parent(parent, local_position);
         self
     }
 

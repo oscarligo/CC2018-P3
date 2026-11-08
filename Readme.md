@@ -54,4 +54,4 @@ El mundo separa objetos opacos y transparentes: los opacos se dibujan de adelant
 
 El gigante gaseoso utiliza una malla anular transparente, compartida y de doble cara, con bandas y desvanecimiento radial.
 
-Los planetas usan órbitas inclinadas compartidas por sus cuerpos, atmósferas y anillos para mantener cada grupo sincronizado.
+Los planetas usan órbitas inclinadas. Sus atmósferas, anillos y futuros elementos se conectan mediante anclas padre-hijo y posiciones locales, por lo que siguen al cuerpo sin duplicar parámetros orbitales.

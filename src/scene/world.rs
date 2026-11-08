@@ -3,6 +3,68 @@ use crate::rendering::projection::sphere_is_visible;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use raylib::prelude::Vector3;
+use std::cell::RefCell;
+use std::rc::Rc;
+
+#[derive(Clone)]
+pub(crate) struct TransformAnchor(Rc<RefCell<AnchorState>>);
+
+struct AnchorState {
+    local_position: Vector3,
+    parent: Option<TransformAnchor>,
+}
+
+impl TransformAnchor {
+    fn new(position: Vector3) -> Self {
+        Self(Rc::new(RefCell::new(AnchorState {
+            local_position: position,
+            parent: None,
+        })))
+    }
+
+    fn world_position(&self) -> Vector3 {
+        let state = self.0.borrow();
+        let local_position = state.local_position;
+        let parent = state.parent.clone();
+        drop(state);
+        parent.map_or(local_position, |parent| {
+            parent.world_position() + local_position
+        })
+    }
+
+    fn contains(&self, target: &Self) -> bool {
+        if Rc::ptr_eq(&self.0, &target.0) {
+            return true;
+        }
+        self.0
+            .borrow()
+            .parent
+            .as_ref()
+            .is_some_and(|parent| parent.contains(target))
+    }
+
+    fn set_local_position(&self, position: Vector3) {
+        self.0.borrow_mut().local_position = position;
+    }
+
+    fn local_position(&self) -> Vector3 {
+        self.0.borrow().local_position
+    }
+
+    fn set_parent(&self, parent: Option<Self>) {
+        if let Some(parent) = &parent {
+            assert!(
+                !parent.contains(self),
+                "a transform cannot be attached to itself or one of its children"
+            );
+        }
+        self.0.borrow_mut().parent = parent;
+    }
+
+    fn has_parent(&self) -> bool {
+        self.0.borrow().parent.is_some()
+    }
+}
 
 /// Estado espacial común para cualquier entidad del mundo.
 pub struct WorldTransform {
@@ -11,6 +73,7 @@ pub struct WorldTransform {
     pub scale: Vector3,
     orbit: Option<Orbit>,
     orbit_time: f32,
+    anchor: TransformAnchor,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -58,21 +121,46 @@ impl WorldTransform {
             scale,
             orbit: None,
             orbit_time: 0.0,
+            anchor: TransformAnchor::new(position),
         }
     }
 
+    pub(crate) fn anchor(&self) -> TransformAnchor {
+        self.anchor.clone()
+    }
+
+    pub(crate) fn set_parent(&mut self, parent: TransformAnchor, local_position: Vector3) {
+        self.orbit = None;
+        self.orbit_time = 0.0;
+        self.anchor.set_local_position(local_position);
+        self.anchor.set_parent(Some(parent));
+        self.position = self.anchor.world_position();
+    }
+
     pub fn set_orbit(&mut self, orbit: Orbit) {
+        self.anchor.set_parent(None);
         self.orbit = Some(orbit);
         self.orbit_time = 0.0;
         self.position = orbit.position(0.0);
+        self.anchor.set_local_position(self.position);
     }
 
     fn advance(&mut self, update: &WorldUpdate) {
+        if self.anchor.has_parent() {
+            let local_position = self.anchor.local_position() + self.velocity * update.frame_time;
+            self.anchor.set_local_position(local_position);
+            return;
+        }
         if let Some(orbit) = self.orbit {
             self.orbit_time += update.frame_time;
             self.position = orbit.position(self.orbit_time);
         }
         self.position += self.velocity * update.frame_time;
+        self.anchor.set_local_position(self.position);
+    }
+
+    fn resolve_world_position(&mut self) {
+        self.position = self.anchor.world_position();
     }
 }
 
@@ -128,6 +216,9 @@ impl World {
         for object in &mut self.objects {
             object.transform_mut().advance(update);
             object.update(update);
+        }
+        for object in &mut self.objects {
+            object.transform_mut().resolve_world_position();
         }
     }
 
@@ -366,24 +457,46 @@ mod tests {
     }
 
     #[test]
-    fn shared_orbit_parameters_keep_grouped_transforms_synchronized() {
+    fn child_transform_follows_its_orbiting_parent() {
         let center = Vector3::new(0.0, 0.0, 5.0);
         let initial = Vector3::new(10.0, 2.0, 5.0);
         let orbit = Orbit::new(center, initial, Vector3::new(0.2, 1.0, 0.1), 0.5);
-        let mut body = WorldTransform::new(initial, Vector3::new(1.0, 1.0, 1.0));
-        let mut atmosphere = WorldTransform::new(initial, Vector3::new(1.1, 1.1, 1.1));
-        body.set_orbit(orbit);
-        atmosphere.set_orbit(orbit);
+        let mut parent = WorldTransform::new(initial, Vector3::new(1.0, 1.0, 1.0));
+        let mut child = WorldTransform::new(Vector3::zero(), Vector3::new(1.1, 1.1, 1.1));
+        let offset = Vector3::new(2.0, -1.0, 3.0);
+        parent.set_orbit(orbit);
+        child.set_parent(parent.anchor(), offset);
 
         for _ in 0..120 {
             let update = WorldUpdate {
                 frame_time: 1.0 / 60.0,
             };
-            body.advance(&update);
-            atmosphere.advance(&update);
+            child.advance(&update);
+            parent.advance(&update);
+            parent.resolve_world_position();
+            child.resolve_world_position();
         }
 
-        assert!((body.position - atmosphere.position).length() < 0.0001);
-        assert!(((body.position - center).length() - (initial - center).length()).abs() < 0.001);
+        assert!((child.position - parent.position - offset).length() < 0.0001);
+        assert!(((parent.position - center).length() - (initial - center).length()).abs() < 0.001);
+    }
+
+    #[test]
+    fn nested_transforms_resolve_independently_of_update_order() {
+        let scale = Vector3::new(1.0, 1.0, 1.0);
+        let mut root = WorldTransform::new(Vector3::new(10.0, 0.0, 0.0), scale);
+        let mut child = WorldTransform::new(Vector3::zero(), scale);
+        let mut grandchild = WorldTransform::new(Vector3::zero(), scale);
+        child.set_parent(root.anchor(), Vector3::new(2.0, 0.0, 0.0));
+        grandchild.set_parent(child.anchor(), Vector3::new(0.0, 3.0, 0.0));
+        root.velocity = Vector3::new(5.0, 0.0, 0.0);
+        let update = WorldUpdate { frame_time: 1.0 };
+
+        grandchild.advance(&update);
+        child.advance(&update);
+        root.advance(&update);
+        grandchild.resolve_world_position();
+
+        assert_eq!(grandchild.position, Vector3::new(17.0, 3.0, 0.0));
     }
 }
