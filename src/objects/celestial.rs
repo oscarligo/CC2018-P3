@@ -80,14 +80,29 @@ impl CelestialBody {
 
     fn update_surface(&mut self) {
         let (sin_rotation, cos_rotation) = self.rotation.sin_cos();
-        for (color, vertex) in self.colors.iter_mut().zip(&sphere_mesh(self.lod).vertices) {
+        let base_colors = match self.kind {
+            CelestialKind::Rocky => Some(rocky_base_colors(self.lod)),
+            CelestialKind::Star | CelestialKind::GasGiant => None,
+        };
+        for (index, (color, vertex)) in self
+            .colors
+            .iter_mut()
+            .zip(&sphere_mesh(self.lod).vertices)
+            .enumerate()
+        {
             let point = vertex.normal;
             let world_normal = Vector3::new(
                 point.x * cos_rotation + point.z * sin_rotation,
                 point.y,
                 -point.x * sin_rotation + point.z * cos_rotation,
             );
-            *color = crate::celestial_shaders::shade(self.kind, point, world_normal, self.time);
+            *color = crate::celestial_shaders::shade(
+                self.kind,
+                point,
+                world_normal,
+                self.time,
+                base_colors.map(|colors| colors[index]),
+            );
         }
     }
 
@@ -202,6 +217,29 @@ fn sphere_mesh(lod: SphereLod) -> &'static Mesh {
     }
 }
 
+fn rocky_base_colors(lod: SphereLod) -> &'static [Vector3] {
+    static HIGH: OnceLock<Vec<Vector3>> = OnceLock::new();
+    static MEDIUM: OnceLock<Vec<Vector3>> = OnceLock::new();
+    static LOW: OnceLock<Vec<Vector3>> = OnceLock::new();
+    let colors = match lod {
+        SphereLod::High => HIGH.get_or_init(|| build_rocky_base_colors(SphereLod::High)),
+        SphereLod::Medium => MEDIUM.get_or_init(|| build_rocky_base_colors(SphereLod::Medium)),
+        SphereLod::Low => LOW.get_or_init(|| build_rocky_base_colors(SphereLod::Low)),
+    };
+    colors.as_slice()
+}
+
+fn build_rocky_base_colors(lod: SphereLod) -> Vec<Vector3> {
+    sphere_mesh(lod)
+        .vertices
+        .iter()
+        .map(|vertex| {
+            crate::celestial_shaders::base_color(CelestialKind::Rocky, vertex.normal)
+                .expect("rocky bodies provide a base color")
+        })
+        .collect()
+}
+
 fn build_sphere_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh {
     let row_size = longitude_segments + 1;
     let mut vertices = Vec::with_capacity((latitude_segments + 1) * row_size);
@@ -274,6 +312,10 @@ mod tests {
             body.colors.len(),
             sphere_mesh(SphereLod::Low).vertices.len()
         );
+        assert!(std::ptr::eq(
+            rocky_base_colors(SphereLod::Low),
+            rocky_base_colors(SphereLod::Low)
+        ));
     }
 
     #[test]

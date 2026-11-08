@@ -12,10 +12,28 @@ pub enum CelestialKind {
     GasGiant,
 }
 
-pub fn shade(kind: CelestialKind, point: Vector3, normal: Vector3, time: f32) -> Vector3 {
+pub fn base_color(kind: CelestialKind, point: Vector3) -> Option<Vector3> {
+    match kind {
+        CelestialKind::Rocky => Some(rocky::base_color(point)),
+        CelestialKind::Star | CelestialKind::GasGiant => None,
+    }
+}
+
+pub fn shade(
+    kind: CelestialKind,
+    point: Vector3,
+    normal: Vector3,
+    time: f32,
+    base_color: Option<Vector3>,
+) -> Vector3 {
     match kind {
         CelestialKind::Star => star::shade(point, time),
-        CelestialKind::Rocky => rocky::shade(point, normal, time),
+        CelestialKind::Rocky => rocky::shade(
+            base_color.expect("rocky bodies require a precalculated base color"),
+            point,
+            normal,
+            time,
+        ),
         CelestialKind::GasGiant => gas_giant::shade(point, normal, time),
     }
 }
@@ -41,7 +59,7 @@ mod tests {
             CelestialKind::Rocky,
             CelestialKind::GasGiant,
         ] {
-            let color = shade(kind, point, point, 1.25);
+            let color = shade(kind, point, point, 1.25, base_color(kind, point));
             for channel in [color.x, color.y, color.z] {
                 assert!(channel.is_finite() && (0.0..=1.0).contains(&channel));
             }
