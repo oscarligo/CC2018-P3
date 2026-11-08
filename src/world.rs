@@ -96,15 +96,25 @@ impl World {
 
     fn sort_front_to_back(&mut self, camera_position: Vector3) {
         self.objects.sort_by(|a, b| {
-            distance_squared(a.transform().position, camera_position)
-                .total_cmp(&distance_squared(b.transform().position, camera_position))
+            distance_to_surface(a.as_ref(), camera_position)
+                .total_cmp(&distance_to_surface(b.as_ref(), camera_position))
         });
     }
 }
 
-fn distance_squared(a: Vector3, b: Vector3) -> f32 {
-    let delta = a - b;
-    delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+fn distance_to_surface(object: &dyn WorldObject, camera_position: Vector3) -> f32 {
+    let transform = object.transform();
+    let distance = (transform.position - camera_position).length();
+    let radius = object.bounding_radius().map_or(0.0, |local_radius| {
+        let scale = transform
+            .scale
+            .x
+            .abs()
+            .max(transform.scale.y.abs())
+            .max(transform.scale.z.abs());
+        local_radius * scale
+    });
+    (distance - radius).max(0.0)
 }
 
 #[cfg(test)]
@@ -113,6 +123,7 @@ mod tests {
 
     struct TestObject {
         transform: WorldTransform,
+        radius: Option<f32>,
     }
 
     impl WorldObject for TestObject {
@@ -122,6 +133,10 @@ mod tests {
 
         fn transform_mut(&mut self) -> &mut WorldTransform {
             &mut self.transform
+        }
+
+        fn bounding_radius(&self) -> Option<f32> {
+            self.radius
         }
 
         fn draw(
@@ -142,6 +157,7 @@ mod tests {
                     Vector3::new(0.0, 0.0, z),
                     Vector3::new(1.0, 1.0, 1.0),
                 ),
+                radius: None,
             });
         }
 
@@ -153,5 +169,28 @@ mod tests {
             .map(|object| object.transform().position.z)
             .collect();
         assert_eq!(positions, [10.0, 20.0, 30.0]);
+    }
+
+    #[test]
+    fn sorting_accounts_for_object_radius_and_scale() {
+        let mut world = World::new();
+        world.add(TestObject {
+            transform: WorldTransform::new(
+                Vector3::new(0.0, 0.0, 8.0),
+                Vector3::new(1.0, 1.0, 1.0),
+            ),
+            radius: None,
+        });
+        world.add(TestObject {
+            transform: WorldTransform::new(
+                Vector3::new(0.0, 0.0, 10.0),
+                Vector3::new(2.0, 2.0, 2.0),
+            ),
+            radius: Some(2.0),
+        });
+
+        world.sort_front_to_back(Vector3::zero());
+
+        assert_eq!(world.objects[0].transform().position.z, 10.0);
     }
 }
