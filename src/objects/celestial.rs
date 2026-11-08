@@ -40,6 +40,7 @@ pub enum BodyShape {
     #[default]
     Sphere,
     Rocky,
+    Oblate,
 }
 
 struct LodTransition {
@@ -448,10 +449,27 @@ fn project_to_lod_surface(direction: Vector3, lod: SphereLod, shape: BodyShape) 
     }
 }
 
-fn body_mesh(lod: SphereLod, shape: BodyShape) -> &'static Mesh {
+pub(crate) fn body_mesh(lod: SphereLod, shape: BodyShape) -> &'static Mesh {
     match shape {
         BodyShape::Sphere => sphere_mesh(lod),
         BodyShape::Rocky => rocky_mesh(lod),
+        BodyShape::Oblate => oblate_mesh(lod),
+    }
+}
+
+fn oblate_mesh(lod: SphereLod) -> &'static Mesh {
+    static HIGH: OnceLock<Mesh> = OnceLock::new();
+    static MEDIUM: OnceLock<Mesh> = OnceLock::new();
+    static LOW: OnceLock<Mesh> = OnceLock::new();
+    match lod {
+        SphereLod::High => {
+            HIGH.get_or_init(|| build_oblate_mesh(HIGH_LATITUDE_SEGMENTS, HIGH_LONGITUDE_SEGMENTS))
+        }
+        SphereLod::Medium => MEDIUM
+            .get_or_init(|| build_oblate_mesh(MEDIUM_LATITUDE_SEGMENTS, MEDIUM_LONGITUDE_SEGMENTS)),
+        SphereLod::Low => {
+            LOW.get_or_init(|| build_oblate_mesh(LOW_LATITUDE_SEGMENTS, LOW_LONGITUDE_SEGMENTS))
+        }
     }
 }
 
@@ -479,6 +497,14 @@ fn shape_radius(direction: Vector3, shape: BodyShape) -> f32 {
             let detail = crate::noise::fbm(direction * 7.3 + Vector3::new(-0.8, 3.2, 1.6), 3);
             0.88 + broad * 0.20 + detail * 0.04
         }
+        BodyShape::Oblate => {
+            const EQUATORIAL_RADIUS: f32 = 1.05;
+            const POLAR_RADIUS: f32 = 0.82;
+            1.0 / ((direction.x * direction.x + direction.z * direction.z)
+                / (EQUATORIAL_RADIUS * EQUATORIAL_RADIUS)
+                + direction.y * direction.y / (POLAR_RADIUS * POLAR_RADIUS))
+                .sqrt()
+        }
     }
 }
 
@@ -486,6 +512,7 @@ fn shape_bound(shape: BodyShape) -> f32 {
     match shape {
         BodyShape::Sphere => 1.0,
         BodyShape::Rocky => 1.12,
+        BodyShape::Oblate => 1.05,
     }
 }
 
@@ -495,6 +522,24 @@ fn build_rocky_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh
         vertex.position = vertex.normal * shape_radius(vertex.normal, BodyShape::Rocky);
     }
 
+    recalculate_normals(&mut mesh);
+    mesh
+}
+
+fn build_oblate_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh {
+    let mut mesh = build_sphere_mesh(latitude_segments, longitude_segments);
+    for vertex in &mut mesh.vertices {
+        vertex.position = Vector3::new(
+            vertex.position.x * 1.05,
+            vertex.position.y * 0.82,
+            vertex.position.z * 1.05,
+        );
+    }
+    recalculate_normals(&mut mesh);
+    mesh
+}
+
+fn recalculate_normals(mesh: &mut Mesh) {
     let mut normals = vec![Vector3::zero(); mesh.vertices.len()];
     for triangle in mesh.indices.chunks_exact(3) {
         let a = mesh.vertices[triangle[0] as usize].position;
@@ -512,7 +557,6 @@ fn build_rocky_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh
             vertex.position.normalize()
         };
     }
-    mesh
 }
 
 pub(crate) fn sphere_mesh(lod: SphereLod) -> &'static Mesh {
@@ -707,6 +751,32 @@ mod tests {
             );
         assert!(maximum - minimum > 0.05);
         assert!(maximum <= shape_bound(BodyShape::Rocky));
+        assert!(
+            mesh.vertices
+                .iter()
+                .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001)
+        );
+    }
+
+    #[test]
+    fn oblate_shape_has_a_wider_equator_than_poles() {
+        let mesh = body_mesh(SphereLod::High, BodyShape::Oblate);
+        let equatorial_radius = mesh
+            .vertices
+            .iter()
+            .map(|vertex| {
+                (vertex.position.x * vertex.position.x + vertex.position.z * vertex.position.z)
+                    .sqrt()
+            })
+            .fold(0.0, f32::max);
+        let polar_radius = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.y.abs())
+            .fold(0.0, f32::max);
+
+        assert!((equatorial_radius - 1.05).abs() < 0.001);
+        assert!((polar_radius - 0.82).abs() < 0.001);
         assert!(
             mesh.vertices
                 .iter()

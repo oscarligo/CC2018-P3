@@ -1,4 +1,4 @@
-use super::celestial::{SphereLod, sphere_mesh};
+use super::celestial::{BodyShape, SphereLod, body_mesh};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
@@ -8,6 +8,7 @@ use raylib::prelude::{Matrix, Vector3};
 pub struct Atmosphere {
     transform: WorldTransform,
     strength: f32,
+    shape: BodyShape,
     colors: Vec<Vector3>,
     alphas: Vec<f32>,
 }
@@ -20,7 +21,8 @@ impl Atmosphere {
         color: Vector3,
         strength: f32,
     ) -> Self {
-        let vertex_count = sphere_mesh(SphereLod::Medium).vertices.len();
+        let shape = BodyShape::Sphere;
+        let vertex_count = body_mesh(SphereLod::Medium, shape).vertices.len();
         Self {
             transform: WorldTransform::new(
                 position,
@@ -31,9 +33,15 @@ impl Atmosphere {
                 ),
             ),
             strength,
+            shape,
             colors: vec![color; vertex_count],
             alphas: vec![0.0; vertex_count],
         }
+    }
+
+    pub(crate) fn with_shape(mut self, shape: BodyShape) -> Self {
+        self.shape = shape;
+        self
     }
 
     pub(crate) fn attached_to(mut self, parent: TransformAnchor, local_position: Vector3) -> Self {
@@ -63,7 +71,7 @@ impl Atmosphere {
         for (alpha, vertex) in self
             .alphas
             .iter_mut()
-            .zip(&sphere_mesh(SphereLod::Medium).vertices)
+            .zip(&body_mesh(SphereLod::Medium, self.shape).vertices)
         {
             let facing = vertex.normal.dot(view_direction).max(0.0);
             let rim = (1.0 - facing).powf(2.2);
@@ -103,7 +111,7 @@ impl WorldObject for Atmosphere {
         renderer.render_colored_transparent(
             framebuffer,
             &atmosphere_uniforms,
-            sphere_mesh(SphereLod::Medium),
+            body_mesh(SphereLod::Medium, self.shape),
             &self.colors,
             &self.alphas,
         );
@@ -119,7 +127,7 @@ mod tests {
         let mut atmosphere =
             Atmosphere::new(Vector3::zero(), 1.0, 1.1, Vector3::new(0.2, 0.5, 1.0), 0.5);
         atmosphere.update_fresnel(Vector3::new(0.0, 0.0, -10.0));
-        let mesh = sphere_mesh(SphereLod::Medium);
+        let mesh = body_mesh(SphereLod::Medium, BodyShape::Sphere);
         let center = mesh
             .vertices
             .iter()

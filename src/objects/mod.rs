@@ -62,6 +62,7 @@ pub fn register_all(_world: &mut World) {
             ..CelestialStyle::default()
         },
     )
+    .with_shape(BodyShape::Oblate)
     .with_orbit(gas_orbit);
     let gas_anchor = gas.transform.anchor();
 
@@ -115,6 +116,7 @@ pub fn register_all(_world: &mut World) {
             Vector3::new(1.0, 0.58, 0.18),
             0.10,
         )
+        .with_shape(BodyShape::Oblate)
         .attached_to(gas_anchor.clone(), Vector3::zero()),
     );
     _world.add(
