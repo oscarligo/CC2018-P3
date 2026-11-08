@@ -70,3 +70,5 @@ El gigante gaseoso usa un perfil achatado, con ecuador más ancho y polos compri
 El sistema también contiene un asteroide pequeño, alargado e irregular. Usa una paleta mineral sin nubes, rota de forma independiente y orbita localmente al planeta rocoso mientras este se desplaza alrededor del sol. Puede localizarse e inspeccionarse con el sistema de interacción.
 
 Las órbitas locales heredan únicamente la traslación del padre: no deforman el satélite con la escala planetaria ni arrastran su trayectoria con la rotación superficial.
+
+La composición del sistema vive en `objects/catalog.rs`: cada cuerpo declara forma, escala, estilo, movimiento, atmósfera, anillos y rocas. Un ensamblador común resuelve las dependencias padre-hijo y registra los objetos correspondientes.
