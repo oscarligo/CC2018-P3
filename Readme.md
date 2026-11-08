@@ -60,3 +60,5 @@ Los planetas usan órbitas inclinadas. Sus atmósferas, anillos y futuros elemen
 Los cuerpos sólidos tienen identificadores estables y colisionadores esféricos. El mundo ofrece raycast al impacto más cercano y consultas de proximidad sin asignaciones obligatorias por frame. Atmósferas y anillos permanecen fuera de las colisiones.
 
 El sistema de interacción selecciona el primer objeto sólido bajo el centro de la cámara, muestra su acción disponible y presenta una respuesta temporal al activarlo.
+
+El planeta rocoso incluye formaciones de baja geometría distribuidas sobre su superficie. Comparten una sola malla, heredan la transformación planetaria, reciben iluminación solar y pueden examinarse individualmente.

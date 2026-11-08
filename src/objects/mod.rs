@@ -5,6 +5,7 @@ use raylib::prelude::Vector3;
 pub mod atmosphere;
 pub mod celestial;
 pub mod ring;
+pub mod rock;
 
 /// Register all objects in the world.
 pub fn register_all(_world: &mut World) {
@@ -65,6 +66,25 @@ pub fn register_all(_world: &mut World) {
     _world.add(sun);
     _world.add(rocky);
     _world.add(gas);
+    let rock_directions = [
+        Vector3::new(0.0, 0.0, -1.0),
+        Vector3::new(-0.55, 0.20, -0.81),
+        Vector3::new(0.48, 0.42, -0.77),
+        Vector3::new(-0.18, 0.90, -0.38),
+        Vector3::new(-0.82, -0.30, -0.48),
+        Vector3::new(0.74, -0.38, -0.55),
+        Vector3::new(0.90, 0.12, 0.42),
+        Vector3::new(-0.40, 0.55, 0.73),
+    ];
+    for (index, direction) in rock_directions.into_iter().enumerate() {
+        let size = 9.0 + (index % 3) as f32 * 3.5;
+        _world.add(rock::SurfaceRock::attached_to(
+            rocky_anchor.clone(),
+            direction,
+            Vector3::new(size, size, size),
+            index as f32 * 0.73,
+        ));
+    }
     _world.add(
         atmosphere::Atmosphere::new(
             sun_position,

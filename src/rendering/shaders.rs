@@ -48,7 +48,7 @@ pub fn lit_vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let light_direction = normalized_or_zero(light_position - result.transformed_position);
     let diffuse = normal.dot(light_direction).max(0.0).powf(0.65);
     let intensity = AMBIENT_LIGHT + diffuse * (1.0 - AMBIENT_LIGHT);
-    result.color = Vector3::new(intensity, intensity, intensity);
+    result.color = vertex.color * intensity;
     result
 }
 
