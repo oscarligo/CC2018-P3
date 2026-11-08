@@ -30,7 +30,7 @@ Los objetos del mundo se renderizan de adelante hacia atrás según la distancia
 
 Los triángulos que atraviesan el plano cercano de la cámara se recortan conservando sus colores, UV y materiales.
 
-Los cambios de LOD usan umbrales distintos de entrada y salida para evitar oscilaciones cuando un cuerpo permanece cerca de un límite.
+Los cambios de LOD usan umbrales distintos de entrada y salida para evitar oscilaciones cuando un cuerpo permanece cerca de un límite. Las transiciones ocurren cuando el error proyectado de la silueta ronda un píxel, reduciendo saltos visibles sin dibujar dos mallas ni agregar un pase de mezcla.
 
 Los planetas reciben iluminación desde la posición real de la estrella primaria registrada en el mundo.
 

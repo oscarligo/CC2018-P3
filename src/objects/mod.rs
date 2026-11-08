@@ -11,7 +11,7 @@ pub fn register_all(_world: &mut World) {
     const BODY_SCALE: f32 = 165.0;
     let sun_position = Vector3::new(0.0, 0.0, 500.0);
     let rocky_position = Vector3::new(-300.0, 100.0, 800.0);
-    let gas_position = Vector3::new(350.0, -50.0, 1_000.0);
+    let gas_position = Vector3::new(1550.0, -50.0, 3000.0);
     let rocky_orbit = Orbit::new(
         sun_position,
         rocky_position,

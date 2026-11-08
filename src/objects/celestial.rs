@@ -18,10 +18,10 @@ const MEDIUM_LATITUDE_SEGMENTS: usize = 18;
 const MEDIUM_LONGITUDE_SEGMENTS: usize = 27;
 const LOW_LATITUDE_SEGMENTS: usize = 8;
 const LOW_LONGITUDE_SEGMENTS: usize = 12;
-const HIGH_LOD_ENTER_RADIUS: f32 = 165.0;
-const HIGH_LOD_EXIT_RADIUS: f32 = 135.0;
-const MEDIUM_LOD_ENTER_RADIUS: f32 = 45.0;
-const MEDIUM_LOD_EXIT_RADIUS: f32 = 35.0;
+const HIGH_LOD_ENTER_RADIUS: f32 = 150.0;
+const HIGH_LOD_EXIT_RADIUS: f32 = 125.0;
+const MEDIUM_LOD_ENTER_RADIUS: f32 = 32.0;
+const MEDIUM_LOD_EXIT_RADIUS: f32 = 26.0;
 const MEDIUM_UPDATE_INTERVAL: f32 = 1.0 / 30.0;
 const LOW_UPDATE_INTERVAL: f32 = 1.0 / 10.0;
 
@@ -353,6 +353,16 @@ mod tests {
             let face_normal = (b - a).cross(c - a);
             face_normal.length() < 0.001 || face_normal.dot(a + b + c) > 0.0
         }));
+    }
+
+    #[test]
+    fn lod_transitions_keep_silhouette_error_near_one_pixel() {
+        fn silhouette_error(radius: f32, longitude_segments: usize) -> f32 {
+            radius * (1.0 - (PI / longitude_segments as f32).cos())
+        }
+
+        assert!(silhouette_error(MEDIUM_LOD_ENTER_RADIUS, LOW_LONGITUDE_SEGMENTS) <= 1.1);
+        assert!(silhouette_error(HIGH_LOD_ENTER_RADIUS, MEDIUM_LONGITUDE_SEGMENTS) <= 1.1);
     }
 
     #[test]
