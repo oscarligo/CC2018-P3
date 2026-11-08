@@ -15,6 +15,10 @@ fn edge(a: Vector2, b: Vector2, point: Vector2) -> f32 {
     (point.x - a.x) * (b.y - a.y) - (point.y - a.y) * (b.x - a.x)
 }
 
+pub(crate) fn is_back_facing(a: &Vertex, b: &Vertex, c: &Vertex) -> bool {
+    positions(a, b, c).is_some_and(|points| edge(points[1], points[2], points[0]) < -EPSILON)
+}
+
 fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> Fragment {
     let inverse_depth = weights[0] / vertices[0].camera_depth
         + weights[1] / vertices[1].camera_depth
@@ -130,4 +134,25 @@ pub fn triangle_scanline(
     }
 
     fragments
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn vertex(x: f32, y: f32) -> Vertex {
+        let mut vertex = Vertex::new(Default::default());
+        vertex.screen_position = Some(Vector2::new(x, y));
+        vertex
+    }
+
+    #[test]
+    fn culls_only_clockwise_screen_winding() {
+        let a = vertex(0.0, 0.0);
+        let b = vertex(0.0, 1.0);
+        let c = vertex(1.0, 0.0);
+
+        assert!(!is_back_facing(&a, &b, &c));
+        assert!(is_back_facing(&a, &c, &b));
+    }
 }

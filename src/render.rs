@@ -54,7 +54,7 @@ impl Renderer {
 
         // 2. Primitive assembly and rasterization
         let stage_start = Instant::now();
-        rasterize_indexed(
+        let culled_triangles = rasterize_indexed(
             &self.transformed_vertices,
             &mesh.indices,
             framebuffer.width,
@@ -63,6 +63,7 @@ impl Renderer {
         );
         self.metrics.rasterization += stage_start.elapsed();
         self.metrics.triangles += mesh.indices.len() / 3;
+        self.metrics.culled_triangles += culled_triangles;
         self.metrics.fragment_count += self.fragments.len();
 
         // 3. Fragment Processing

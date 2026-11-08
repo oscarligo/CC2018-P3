@@ -10,6 +10,7 @@ pub struct FrameMetrics {
     pub rasterization: Duration,
     pub fragments: Duration,
     pub triangles: usize,
+    pub culled_triangles: usize,
     pub fragment_count: usize,
 }
 
@@ -44,7 +45,7 @@ impl PerformanceMonitor {
         let frame = average(|sample| sample.frame);
 
         eprintln!(
-            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | vertex {:.2} ms | raster {:.2} ms | fragments {:.2} ms | triangles {:.0} | fragments {:.0}",
+            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | vertex {:.2} ms | raster {:.2} ms | fragments {:.2} ms | triangles {:.0} | culled {:.0} | fragments {:.0}",
             1000.0 / frame.max(f64::EPSILON),
             frame,
             p95,
@@ -53,6 +54,7 @@ impl PerformanceMonitor {
             average(|sample| sample.rasterization),
             average(|sample| sample.fragments),
             average_count(|sample| sample.triangles),
+            average_count(|sample| sample.culled_triangles),
             average_count(|sample| sample.fragment_count),
         );
         self.samples.clear();
