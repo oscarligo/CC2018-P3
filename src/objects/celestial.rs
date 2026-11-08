@@ -35,24 +35,37 @@ pub(crate) enum SphereLod {
     Low,
 }
 
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BodyShape {
+    #[default]
+    Sphere,
+    Rocky,
+}
+
 struct LodTransition {
     target: SphereLod,
     elapsed: f32,
     refining: bool,
     coarse_positions: Vec<Vector3>,
+    fine_positions: Vec<Vector3>,
     mesh: Mesh,
 }
 
 impl LodTransition {
-    fn new(from: SphereLod, target: SphereLod) -> Self {
+    fn new(from: SphereLod, target: SphereLod, shape: BodyShape) -> Self {
         let refining = lod_detail(target) > lod_detail(from);
         let topology = if refining { target } else { from };
         let coarse = if refining { from } else { target };
-        let source = sphere_mesh(topology);
+        let source = body_mesh(topology, shape);
+        let fine_positions = source
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position)
+            .collect::<Vec<_>>();
         let coarse_positions = source
             .vertices
             .iter()
-            .map(|vertex| project_to_lod_surface(vertex.normal, coarse))
+            .map(|vertex| project_to_lod_surface(vertex.position.normalize(), coarse, shape))
             .collect::<Vec<_>>();
         let mut vertices = source.vertices.clone();
         if refining {
@@ -65,6 +78,7 @@ impl LodTransition {
             elapsed: 0.0,
             refining,
             coarse_positions,
+            fine_positions,
             mesh: Mesh {
                 vertices,
                 indices: source.indices.clone(),
@@ -79,12 +93,17 @@ impl LodTransition {
         self.elapsed += frame_time;
         let progress = (self.elapsed / LOD_TRANSITION_SECONDS).clamp(0.0, 1.0);
         let progress = progress * progress * (3.0 - 2.0 * progress);
-        for (vertex, coarse) in self.mesh.vertices.iter_mut().zip(&self.coarse_positions) {
-            let fine = vertex.normal;
+        for ((vertex, coarse), fine) in self
+            .mesh
+            .vertices
+            .iter_mut()
+            .zip(&self.coarse_positions)
+            .zip(&self.fine_positions)
+        {
             vertex.position = if self.refining {
-                *coarse + (fine - *coarse) * progress
+                *coarse + (*fine - *coarse) * progress
             } else {
-                fine + (*coarse - fine) * progress
+                *fine + (*coarse - *fine) * progress
             };
         }
         self.elapsed >= LOD_TRANSITION_SECONDS
@@ -97,6 +116,7 @@ pub struct CelestialBody {
     lod_transition: Option<LodTransition>,
     pub(crate) transform: WorldTransform,
     kind: CelestialKind,
+    shape: BodyShape,
     rotation: f32,
     time: f32,
     surface_elapsed: f32,
@@ -128,6 +148,14 @@ impl CelestialBody {
         self
     }
 
+    pub fn with_shape(mut self, shape: BodyShape) -> Self {
+        self.shape = shape;
+        self.colors
+            .resize(body_mesh(self.lod, shape).vertices.len(), Vector3::zero());
+        self.update_surface();
+        self
+    }
+
     fn new_with_light(
         kind: CelestialKind,
         position: Vector3,
@@ -135,7 +163,8 @@ impl CelestialBody {
         style: CelestialStyle,
     ) -> Self {
         let lod = SphereLod::Low;
-        let mesh = sphere_mesh(lod);
+        let shape = BodyShape::Sphere;
+        let mesh = body_mesh(lod, shape);
         let mut body = Self {
             colors: vec![Vector3::zero(); mesh.vertices.len()],
             lod,
@@ -145,6 +174,7 @@ impl CelestialBody {
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
             ),
             kind,
+            shape,
             rotation: 0.0,
             time: 0.0,
             surface_elapsed: 0.0,
@@ -179,14 +209,15 @@ impl CelestialBody {
         for (index, (color, vertex)) in self
             .colors
             .iter_mut()
-            .zip(&sphere_mesh(self.lod).vertices)
+            .zip(&body_mesh(self.lod, self.shape).vertices)
             .enumerate()
         {
-            let point = vertex.normal;
+            let point = vertex.position.normalize();
+            let normal = vertex.normal;
             let world_normal = Vector3::new(
-                rotation.m0 * point.x + rotation.m4 * point.y + rotation.m8 * point.z,
-                rotation.m1 * point.x + rotation.m5 * point.y + rotation.m9 * point.z,
-                rotation.m2 * point.x + rotation.m6 * point.y + rotation.m10 * point.z,
+                rotation.m0 * normal.x + rotation.m4 * normal.y + rotation.m8 * normal.z,
+                rotation.m1 * normal.x + rotation.m5 * normal.y + rotation.m9 * normal.z,
+                rotation.m2 * normal.x + rotation.m6 * normal.y + rotation.m10 * normal.z,
             );
             *color = crate::celestial_shaders::shade(
                 self.kind,
@@ -216,11 +247,11 @@ impl CelestialBody {
         if lod == self.lod {
             return false;
         }
-        let transition = LodTransition::new(self.lod, lod);
+        let transition = LodTransition::new(self.lod, lod, self.shape);
         if transition.refining {
             self.lod = lod;
             self.colors
-                .resize(sphere_mesh(lod).vertices.len(), Vector3::zero());
+                .resize(body_mesh(lod, self.shape).vertices.len(), Vector3::zero());
             self.surface_dirty = true;
         }
         self.lod_transition = Some(transition);
@@ -238,8 +269,10 @@ impl CelestialBody {
         self.lod_transition = None;
         if self.lod != target {
             self.lod = target;
-            self.colors
-                .resize(sphere_mesh(target).vertices.len(), Vector3::zero());
+            self.colors.resize(
+                body_mesh(target, self.shape).vertices.len(),
+                Vector3::zero(),
+            );
             self.surface_dirty = true;
         }
     }
@@ -300,11 +333,13 @@ impl WorldObject for CelestialBody {
     }
 
     fn bounding_radius(&self) -> Option<f32> {
-        Some(1.0)
+        Some(shape_bound(self.shape))
     }
 
     fn collider(&self) -> Option<Collider> {
-        Some(Collider::Sphere { radius: 1.0 })
+        Some(Collider::Sphere {
+            radius: shape_bound(self.shape),
+        })
     }
 
     fn interaction(&self) -> Option<Interaction> {
@@ -340,7 +375,8 @@ impl WorldObject for CelestialBody {
             .x
             .abs()
             .max(self.transform.scale.y.abs())
-            .max(self.transform.scale.z.abs());
+            .max(self.transform.scale.z.abs())
+            * shape_bound(self.shape);
         let radius =
             projected_sphere_radius(self.transform.position, scale, uniforms, framebuffer.height);
         if self.select_lod(radius) {
@@ -358,10 +394,10 @@ impl WorldObject for CelestialBody {
             camera_up: uniforms.camera_up,
             light_position: uniforms.light_position,
         };
-        let mesh = self
-            .lod_transition
-            .as_ref()
-            .map_or_else(|| sphere_mesh(self.lod), |transition| &transition.mesh);
+        let mesh = self.lod_transition.as_ref().map_or_else(
+            || body_mesh(self.lod, self.shape),
+            |transition| &transition.mesh,
+        );
         renderer.render_colored(framebuffer, &body_uniforms, mesh, &self.colors);
     }
 }
@@ -382,7 +418,7 @@ fn lod_segments(lod: SphereLod) -> (usize, usize) {
     }
 }
 
-fn project_to_lod_surface(direction: Vector3, lod: SphereLod) -> Vector3 {
+fn project_to_lod_surface(direction: Vector3, lod: SphereLod, shape: BodyShape) -> Vector3 {
     let (latitude_segments, longitude_segments) = lod_segments(lod);
     let latitude = direction.y.clamp(-1.0, 1.0).acos() / PI * latitude_segments as f32;
     let longitude =
@@ -394,7 +430,7 @@ fn project_to_lod_surface(direction: Vector3, lod: SphereLod) -> Vector3 {
     let row = longitude_segments + 1;
     let current = latitude_index * row + longitude_index;
     let next = current + row;
-    let mesh = sphere_mesh(lod);
+    let mesh = body_mesh(lod, shape);
     let (a, b, c) = if latitude_fraction + longitude_fraction <= 1.0 {
         (current, current + 1, next)
     } else {
@@ -406,10 +442,77 @@ fn project_to_lod_surface(direction: Vector3, lod: SphereLod) -> Vector3 {
     let normal = (b - a).cross(c - a);
     let denominator = normal.dot(direction);
     if denominator.abs() <= f32::EPSILON {
-        direction
+        direction * shape_radius(direction, shape)
     } else {
         direction * (normal.dot(a) / denominator)
     }
+}
+
+fn body_mesh(lod: SphereLod, shape: BodyShape) -> &'static Mesh {
+    match shape {
+        BodyShape::Sphere => sphere_mesh(lod),
+        BodyShape::Rocky => rocky_mesh(lod),
+    }
+}
+
+fn rocky_mesh(lod: SphereLod) -> &'static Mesh {
+    static HIGH: OnceLock<Mesh> = OnceLock::new();
+    static MEDIUM: OnceLock<Mesh> = OnceLock::new();
+    static LOW: OnceLock<Mesh> = OnceLock::new();
+    match lod {
+        SphereLod::High => {
+            HIGH.get_or_init(|| build_rocky_mesh(HIGH_LATITUDE_SEGMENTS, HIGH_LONGITUDE_SEGMENTS))
+        }
+        SphereLod::Medium => MEDIUM
+            .get_or_init(|| build_rocky_mesh(MEDIUM_LATITUDE_SEGMENTS, MEDIUM_LONGITUDE_SEGMENTS)),
+        SphereLod::Low => {
+            LOW.get_or_init(|| build_rocky_mesh(LOW_LATITUDE_SEGMENTS, LOW_LONGITUDE_SEGMENTS))
+        }
+    }
+}
+
+fn shape_radius(direction: Vector3, shape: BodyShape) -> f32 {
+    match shape {
+        BodyShape::Sphere => 1.0,
+        BodyShape::Rocky => {
+            let broad = crate::noise::fbm(direction * 1.7 + Vector3::new(2.4, -1.1, 0.7), 4);
+            let detail = crate::noise::fbm(direction * 7.3 + Vector3::new(-0.8, 3.2, 1.6), 3);
+            0.88 + broad * 0.20 + detail * 0.04
+        }
+    }
+}
+
+fn shape_bound(shape: BodyShape) -> f32 {
+    match shape {
+        BodyShape::Sphere => 1.0,
+        BodyShape::Rocky => 1.12,
+    }
+}
+
+fn build_rocky_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh {
+    let mut mesh = build_sphere_mesh(latitude_segments, longitude_segments);
+    for vertex in &mut mesh.vertices {
+        vertex.position = vertex.normal * shape_radius(vertex.normal, BodyShape::Rocky);
+    }
+
+    let mut normals = vec![Vector3::zero(); mesh.vertices.len()];
+    for triangle in mesh.indices.chunks_exact(3) {
+        let a = mesh.vertices[triangle[0] as usize].position;
+        let b = mesh.vertices[triangle[1] as usize].position;
+        let c = mesh.vertices[triangle[2] as usize].position;
+        let normal = (b - a).cross(c - a);
+        for index in triangle {
+            normals[*index as usize] += normal;
+        }
+    }
+    for (vertex, normal) in mesh.vertices.iter_mut().zip(normals) {
+        vertex.normal = if normal.length() > f32::EPSILON {
+            normal.normalize()
+        } else {
+            vertex.position.normalize()
+        };
+    }
+    mesh
 }
 
 pub(crate) fn sphere_mesh(lod: SphereLod) -> &'static Mesh {
@@ -575,15 +678,40 @@ mod tests {
 
     #[test]
     fn lod_transition_morphs_between_both_surfaces() {
-        let mut transition = LodTransition::new(SphereLod::Low, SphereLod::Medium);
+        let mut transition =
+            LodTransition::new(SphereLod::Low, SphereLod::Medium, BodyShape::Sphere);
         let index = 5 * (MEDIUM_LONGITUDE_SEGMENTS + 1) + 3;
         let fine = transition.mesh.vertices[index].normal;
-        let coarse = project_to_lod_surface(fine, SphereLod::Low);
+        let coarse = project_to_lod_surface(fine, SphereLod::Low, BodyShape::Sphere);
 
         assert!((transition.mesh.vertices[index].position - coarse).length() < 0.0001);
         assert!((fine - coarse).length() > 0.0001);
         assert!(transition.advance(LOD_TRANSITION_SECONDS));
         assert!((transition.mesh.vertices[index].position - fine).length() < 0.0001);
+    }
+
+    #[test]
+    fn rocky_shape_is_static_shared_and_non_spherical() {
+        let mesh = body_mesh(SphereLod::High, BodyShape::Rocky);
+        assert!(std::ptr::eq(
+            mesh,
+            body_mesh(SphereLod::High, BodyShape::Rocky)
+        ));
+        let (minimum, maximum) = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.length())
+            .fold(
+                (f32::INFINITY, f32::NEG_INFINITY),
+                |(minimum, maximum), radius| (minimum.min(radius), maximum.max(radius)),
+            );
+        assert!(maximum - minimum > 0.05);
+        assert!(maximum <= shape_bound(BodyShape::Rocky));
+        assert!(
+            mesh.vertices
+                .iter()
+                .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001)
+        );
     }
 
     #[test]

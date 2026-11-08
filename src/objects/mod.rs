@@ -1,3 +1,4 @@
+use self::celestial::BodyShape;
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::scene::world::{Orbit, World};
 use raylib::prelude::Vector3;
@@ -47,6 +48,7 @@ pub fn register_all(_world: &mut World) {
             ..CelestialStyle::default()
         },
     )
+    .with_shape(BodyShape::Rocky)
     .with_orbit(rocky_orbit);
     let rocky_anchor = rocky.transform.anchor();
     let gas = celestial::CelestialBody::styled(

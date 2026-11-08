@@ -62,3 +62,5 @@ Los cuerpos sólidos tienen identificadores estables y colisionadores esféricos
 El sistema de interacción selecciona el primer objeto sólido bajo el centro de la cámara, muestra su acción disponible y presenta una respuesta temporal al activarlo.
 
 El planeta rocoso incluye formaciones de baja geometría distribuidas sobre su superficie. Comparten una sola malla, heredan la transformación planetaria, reciben iluminación solar y pueden examinarse individualmente.
+
+Su cuerpo usa una deformación estática determinista con elevaciones y depresiones. Cada LOD mantiene una versión equivalente de la forma, con normales recalculadas y transición geométrica entre niveles.

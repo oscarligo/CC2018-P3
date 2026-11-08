@@ -163,6 +163,7 @@ fn benchmark_object_count(args: impl IntoIterator<Item = String>) -> Result<Opti
 
 fn build_benchmark_world(object_count: usize) -> World {
     use celestial_shaders::CelestialKind;
+    use objects::celestial::BodyShape;
 
     let mut world = World::new();
     let columns = ((object_count as f32 * 4.0 / 3.0).sqrt().ceil() as usize).max(1);
@@ -183,7 +184,11 @@ fn build_benchmark_world(object_count: usize) -> World {
         if index == 0 {
             world.add(CelestialBody::new_primary_star(position));
         } else {
-            world.add(CelestialBody::new(kind, position));
+            let body = CelestialBody::new(kind, position);
+            world.add(match kind {
+                CelestialKind::Rocky => body.with_shape(BodyShape::Rocky),
+                CelestialKind::Star | CelestialKind::GasGiant => body,
+            });
         }
     }
 
