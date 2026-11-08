@@ -2,15 +2,20 @@ use crate::fragment::Fragment;
 use crate::triangle::{is_back_facing, triangle_scanline};
 use crate::vertex::Vertex;
 
+pub struct RasterizationStats {
+    pub culled_triangles: usize,
+    pub covered_fragments: usize,
+}
+
 pub fn rasterize_indexed(
     vertices: &[Vertex],
     indices: &[u32],
     width: u32,
     height: u32,
-    fragments: &mut Vec<Fragment>,
-) -> usize {
-    fragments.clear();
+    mut emit: impl FnMut(Fragment),
+) -> RasterizationStats {
     let mut culled_triangles = 0;
+    let mut covered_fragments = 0;
 
     for indices in indices.chunks_exact(3) {
         let a = &vertices[indices[0] as usize];
@@ -20,8 +25,11 @@ pub fn rasterize_indexed(
             culled_triangles += 1;
             continue;
         }
-        fragments.extend(triangle_scanline(a, b, c, width, height));
+        covered_fragments += triangle_scanline(a, b, c, width, height, &mut emit);
     }
 
-    culled_triangles
+    RasterizationStats {
+        culled_triangles,
+        covered_fragments,
+    }
 }

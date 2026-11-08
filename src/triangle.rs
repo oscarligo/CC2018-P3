@@ -16,7 +16,7 @@ fn edge(a: Vector2, b: Vector2, point: Vector2) -> f32 {
 }
 
 pub(crate) fn is_back_facing(a: &Vertex, b: &Vertex, c: &Vertex) -> bool {
-    positions(a, b, c).is_some_and(|points| edge(points[1], points[2], points[0]) < -EPSILON)
+    positions(a, b, c).is_some_and(|points| edge(points[1], points[2], points[0]) > EPSILON)
 }
 
 fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> Fragment {
@@ -64,17 +64,18 @@ pub fn triangle_scanline(
     c: &Vertex,
     width: u32,
     height: u32,
-) -> Vec<Fragment> {
+    emit: &mut impl FnMut(Fragment),
+) -> usize {
     let Some(points) = positions(a, b, c) else {
-        return Vec::new();
+        return 0;
     };
     let area = edge(points[1], points[2], points[0]);
     if area.abs() <= EPSILON {
-        return Vec::new();
+        return 0;
     }
 
     if width == 0 || height == 0 {
-        return Vec::new();
+        return 0;
     }
 
     let viewport_width = i32::try_from(width).unwrap_or(i32::MAX);
@@ -96,7 +97,7 @@ pub fn triangle_scanline(
         (points[1], points[2]),
         (points[2], points[0]),
     ];
-    let mut fragments = Vec::new();
+    let mut fragment_count = 0;
 
     for y in min_y..max_y {
         let sample_y = y as f32 + PIXEL_CENTER_OFFSET;
@@ -128,12 +129,13 @@ pub fn triangle_scanline(
             let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
             let weights = barycentric(center, points, area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
-                fragments.push(fragment_at(center, [a, b, c], weights));
+                emit(fragment_at(center, [a, b, c], weights));
+                fragment_count += 1;
             }
         }
     }
 
-    fragments
+    fragment_count
 }
 
 #[cfg(test)]
@@ -152,7 +154,23 @@ mod tests {
         let b = vertex(0.0, 1.0);
         let c = vertex(1.0, 0.0);
 
-        assert!(!is_back_facing(&a, &b, &c));
-        assert!(is_back_facing(&a, &c, &b));
+        assert!(is_back_facing(&a, &b, &c));
+        assert!(!is_back_facing(&a, &c, &b));
+    }
+
+    #[test]
+    fn emits_fragments_without_an_intermediate_buffer() {
+        let mut a = vertex(0.0, 0.0);
+        let mut b = vertex(0.0, 2.0);
+        let mut c = vertex(2.0, 0.0);
+        a.camera_depth = 1.0;
+        b.camera_depth = 1.0;
+        c.camera_depth = 1.0;
+        let mut emitted = 0;
+
+        let count = triangle_scanline(&a, &c, &b, 3, 3, &mut |_| emitted += 1);
+
+        assert_eq!(count, emitted);
+        assert!(count > 0);
     }
 }

@@ -1,4 +1,3 @@
-use crate::fragment::Fragment;
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::Mesh;
 use crate::performance::FrameMetrics;
@@ -12,7 +11,6 @@ use std::time::Instant;
 #[derive(Default)]
 pub struct Renderer {
     transformed_vertices: Vec<Vertex>,
-    fragments: Vec<Fragment>,
     metrics: FrameMetrics,
 }
 
@@ -54,32 +52,32 @@ impl Renderer {
 
         // 2. Primitive assembly and rasterization
         let stage_start = Instant::now();
-        let culled_triangles = rasterize_indexed(
+        let mut depth_rejected = 0;
+        let mut shaded_fragments = 0;
+        let stats = rasterize_indexed(
             &self.transformed_vertices,
             &mesh.indices,
             framebuffer.width,
             framebuffer.height,
-            &mut self.fragments,
+            |fragment| {
+                let x = fragment.position.x as i32;
+                let y = fragment.position.y as i32;
+                if !framebuffer.is_closer(x, y, fragment.depth) {
+                    depth_rejected += 1;
+                    return;
+                }
+                let Some(color) = fragment_shader(&fragment, &mesh.materials) else {
+                    return;
+                };
+                shaded_fragments += 1;
+                framebuffer.point(x, y, fragment.depth, color);
+            },
         );
         self.metrics.rasterization += stage_start.elapsed();
         self.metrics.triangles += mesh.indices.len() / 3;
-        self.metrics.culled_triangles += culled_triangles;
-        self.metrics.fragment_count += self.fragments.len();
-
-        // 3. Fragment Processing
-        let stage_start = Instant::now();
-        for fragment in &self.fragments {
-            let Some(color) = fragment_shader(fragment, &mesh.materials) else {
-                continue;
-            };
-
-            framebuffer.point(
-                fragment.position.x as i32,
-                fragment.position.y as i32,
-                fragment.depth,
-                color,
-            );
-        }
-        self.metrics.fragments += stage_start.elapsed();
+        self.metrics.culled_triangles += stats.culled_triangles;
+        self.metrics.covered_fragments += stats.covered_fragments;
+        self.metrics.depth_rejected += depth_rejected;
+        self.metrics.shaded_fragments += shaded_fragments;
     }
 }

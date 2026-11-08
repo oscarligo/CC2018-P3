@@ -46,6 +46,13 @@ impl Framebuffer {
         }
     }
 
+    pub fn is_closer(&self, x: i32, y: i32, depth: f32) -> bool {
+        if x < 0 || x >= self.width as i32 || y < 0 || y >= self.height as i32 {
+            return false;
+        }
+        depth < self.depth_buffer[y as usize * self.width as usize + x as usize]
+    }
+
     pub fn swap_buffers(&mut self, window: &mut RaylibHandle, raylib_thread: &RaylibThread) {
         if let Ok(texture) = window.load_texture_from_image(raylib_thread, &self.color_buffer) {
             let mut renderer = window.begin_drawing(raylib_thread);

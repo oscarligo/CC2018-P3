@@ -116,7 +116,7 @@ fn sphere_mesh() -> Mesh {
         for longitude in 0..LONGITUDE_SEGMENTS {
             let current = (latitude * row_size + longitude) as u32;
             let next = current + row_size as u32;
-            indices.extend_from_slice(&[current, next, current + 1, current + 1, next, next + 1]);
+            indices.extend_from_slice(&[current, current + 1, next, current + 1, next + 1, next]);
         }
     }
 
@@ -148,5 +148,12 @@ mod tests {
             .vertices
             .iter()
             .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001));
+        assert!(mesh.indices.chunks_exact(3).all(|indices| {
+            let a = mesh.vertices[indices[0] as usize].position;
+            let b = mesh.vertices[indices[1] as usize].position;
+            let c = mesh.vertices[indices[2] as usize].position;
+            let face_normal = (b - a).cross(c - a);
+            face_normal.length() < 0.001 || face_normal.dot(a + b + c) > 0.0
+        }));
     }
 }

@@ -8,10 +8,11 @@ pub struct FrameMetrics {
     pub update: Duration,
     pub vertex: Duration,
     pub rasterization: Duration,
-    pub fragments: Duration,
     pub triangles: usize,
     pub culled_triangles: usize,
-    pub fragment_count: usize,
+    pub covered_fragments: usize,
+    pub depth_rejected: usize,
+    pub shaded_fragments: usize,
 }
 
 #[derive(Default)]
@@ -45,17 +46,18 @@ impl PerformanceMonitor {
         let frame = average(|sample| sample.frame);
 
         eprintln!(
-            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | vertex {:.2} ms | raster {:.2} ms | fragments {:.2} ms | triangles {:.0} | culled {:.0} | fragments {:.0}",
+            "perf: {:.1} CPU FPS | frame avg {:.2} ms p95 {:.2} ms | update {:.2} ms | vertex {:.2} ms | raster+shade {:.2} ms | triangles {:.0} | culled {:.0} | covered {:.0} | depth rejected {:.0} | shaded {:.0}",
             1000.0 / frame.max(f64::EPSILON),
             frame,
             p95,
             average(|sample| sample.update),
             average(|sample| sample.vertex),
             average(|sample| sample.rasterization),
-            average(|sample| sample.fragments),
             average_count(|sample| sample.triangles),
             average_count(|sample| sample.culled_triangles),
-            average_count(|sample| sample.fragment_count),
+            average_count(|sample| sample.covered_fragments),
+            average_count(|sample| sample.depth_rejected),
+            average_count(|sample| sample.shaded_fragments),
         );
         self.samples.clear();
     }
