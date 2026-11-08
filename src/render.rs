@@ -40,7 +40,7 @@ impl Renderer {
     }
 
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
-        self.render_internal(framebuffer, uniforms, mesh, None);
+        self.render_internal(framebuffer, uniforms, mesh, None, None);
     }
 
     pub fn render_colored(
@@ -51,7 +51,7 @@ impl Renderer {
         colors: &[raylib::prelude::Vector3],
     ) {
         assert_eq!(colors.len(), mesh.vertices.len());
-        self.render_internal(framebuffer, uniforms, mesh, Some(colors));
+        self.render_internal(framebuffer, uniforms, mesh, Some(colors), None);
     }
 
     pub fn render_colored_transparent(
@@ -60,10 +60,11 @@ impl Renderer {
         uniforms: &Uniforms,
         mesh: &Mesh,
         colors: &[raylib::prelude::Vector3],
-        alpha: f32,
+        alphas: &[f32],
     ) {
         assert_eq!(colors.len(), mesh.vertices.len());
-        self.render_internal_with_alpha(framebuffer, uniforms, mesh, Some(colors), alpha);
+        assert_eq!(alphas.len(), mesh.vertices.len());
+        self.render_internal(framebuffer, uniforms, mesh, Some(colors), Some(alphas));
     }
 
     fn render_internal(
@@ -72,20 +73,11 @@ impl Renderer {
         uniforms: &Uniforms,
         mesh: &Mesh,
         colors: Option<&[raylib::prelude::Vector3]>,
-    ) {
-        self.render_internal_with_alpha(framebuffer, uniforms, mesh, colors, 1.0);
-    }
-
-    fn render_internal_with_alpha(
-        &mut self,
-        framebuffer: &mut Framebuffer,
-        uniforms: &Uniforms,
-        mesh: &Mesh,
-        colors: Option<&[raylib::prelude::Vector3]>,
-        alpha: f32,
+        alphas: Option<&[f32]>,
     ) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
+        let transparent = alphas.is_some();
 
         // 1. Vertex Processing
         let stage_start = Instant::now();
@@ -95,6 +87,9 @@ impl Renderer {
                 let mut transformed = vertex_shader(vertex, uniforms);
                 if let Some(colors) = colors {
                     transformed.color = colors[index];
+                }
+                if let Some(alphas) = alphas {
+                    transformed.alpha = alphas[index];
                 }
                 transformed.camera_depth = camera_depth(transformed.transformed_position, uniforms)
                     .unwrap_or(f32::INFINITY);
@@ -125,6 +120,7 @@ impl Renderer {
             framebuffer.width,
             framebuffer.height,
             uniforms,
+            transparent,
             |fragment| {
                 let x = fragment.position.x as i32;
                 let y = fragment.position.y as i32;
@@ -136,7 +132,8 @@ impl Renderer {
                     return;
                 };
                 shaded_fragments += 1;
-                framebuffer.blend_point(x, y, fragment.depth, color, alpha, alpha >= 1.0);
+                let alpha = if transparent { fragment.alpha } else { 1.0 };
+                framebuffer.blend_point(x, y, fragment.depth, color, alpha, !transparent);
             },
         );
         self.metrics.rasterization += stage_start.elapsed();

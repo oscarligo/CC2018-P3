@@ -18,7 +18,12 @@ pub(crate) fn is_back_facing(a: &Vertex, b: &Vertex, c: &Vertex) -> bool {
     positions(a, b, c).is_some_and(|points| edge(points[1], points[2], points[0]) > EPSILON)
 }
 
-fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> Fragment {
+fn fragment_at(
+    position: Vector2,
+    vertices: [&Vertex; 3],
+    weights: [f32; 3],
+    interpolate_alpha: bool,
+) -> Fragment {
     let inverse_depth = weights[0] / vertices[0].camera_depth
         + weights[1] / vertices[1].camera_depth
         + weights[2] / vertices[2].camera_depth;
@@ -30,6 +35,13 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
     let color = vertices[0].color * corrected[0]
         + vertices[1].color * corrected[1]
         + vertices[2].color * corrected[2];
+    let alpha = if interpolate_alpha {
+        vertices[0].alpha * corrected[0]
+            + vertices[1].alpha * corrected[1]
+            + vertices[2].alpha * corrected[2]
+    } else {
+        1.0
+    };
     let depth = 1.0 / inverse_depth;
     let tex_coord = match (
         vertices[0].tex_coord,
@@ -43,6 +55,7 @@ fn fragment_at(position: Vector2, vertices: [&Vertex; 3], weights: [f32; 3]) -> 
     Fragment {
         position,
         color,
+        alpha,
         depth,
         tex_coord,
         material_index: vertices[0].material_index,
@@ -63,6 +76,7 @@ pub fn triangle_scanline(
     c: &Vertex,
     width: u32,
     height: u32,
+    interpolate_alpha: bool,
     emit: &mut impl FnMut(Fragment),
 ) -> usize {
     let Some(points) = positions(a, b, c) else {
@@ -134,7 +148,7 @@ pub fn triangle_scanline(
             let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
             let weights = barycentric(center, points, area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
-                emit(fragment_at(center, [a, b, c], weights));
+                emit(fragment_at(center, [a, b, c], weights, interpolate_alpha));
                 fragment_count += 1;
             }
         }
@@ -173,7 +187,7 @@ mod tests {
         c.camera_depth = 1.0;
         let mut emitted = 0;
 
-        let count = triangle_scanline(&a, &c, &b, 3, 3, &mut |_| emitted += 1);
+        let count = triangle_scanline(&a, &c, &b, 3, 3, false, &mut |_| emitted += 1);
 
         assert_eq!(count, emitted);
         assert!(count > 0);

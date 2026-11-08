@@ -17,6 +17,7 @@ pub fn rasterize_indexed(
     width: u32,
     height: u32,
     uniforms: &Uniforms,
+    interpolate_alpha: bool,
     mut emit: impl FnMut(Fragment),
 ) -> RasterizationStats {
     let mut culled_triangles = 0;
@@ -66,7 +67,8 @@ pub fn rasterize_indexed(
                 culled_triangles += 1;
                 continue;
             }
-            covered_fragments += triangle_scanline(a, b, c, width, height, &mut emit);
+            covered_fragments +=
+                triangle_scanline(a, b, c, width, height, interpolate_alpha, &mut emit);
         }
     }
 
@@ -110,6 +112,7 @@ fn near_intersection(start: Vertex, end: Vertex) -> Vertex {
     vertex.transformed_position = start.transformed_position
         + (end.transformed_position - start.transformed_position) * amount;
     vertex.color = start.color + (end.color - start.color) * amount;
+    vertex.alpha = start.alpha + (end.alpha - start.alpha) * amount;
     vertex.tex_coord = match (start.tex_coord, end.tex_coord) {
         (Some(start), Some(end)) => Some(start + (end - start) * amount),
         _ => None,

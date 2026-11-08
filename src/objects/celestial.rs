@@ -26,7 +26,7 @@ const MEDIUM_UPDATE_INTERVAL: f32 = 1.0 / 30.0;
 const LOW_UPDATE_INTERVAL: f32 = 1.0 / 10.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SphereLod {
+pub(crate) enum SphereLod {
     High,
     Medium,
     Low,
@@ -250,7 +250,7 @@ impl WorldObject for CelestialBody {
     }
 }
 
-fn sphere_mesh(lod: SphereLod) -> &'static Mesh {
+pub(crate) fn sphere_mesh(lod: SphereLod) -> &'static Mesh {
     static HIGH: OnceLock<Mesh> = OnceLock::new();
     static MEDIUM: OnceLock<Mesh> = OnceLock::new();
     static LOW: OnceLock<Mesh> = OnceLock::new();

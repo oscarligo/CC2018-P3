@@ -4,6 +4,7 @@ use raylib::prelude::{Vector2, Vector3};
 pub struct Fragment {
     pub position: Vector2,
     pub color: Vector3,
+    pub alpha: f32,
     pub depth: f32,
     pub tex_coord: Option<Vector2>,
     pub material_index: usize,

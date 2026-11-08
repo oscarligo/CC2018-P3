@@ -35,6 +35,7 @@ pub fn line(start: &Vertex, end: &Vertex, width: u32, height: u32) -> Vec<Fragme
         fragments.push(Fragment {
             position: Vector2::new(x0 as f32, y0 as f32),
             color: start.color,
+            alpha: start.alpha,
             depth: start_depth + (end_depth - start_depth) * (step / steps),
             tex_coord: start.tex_coord,
             material_index: start.material_index,

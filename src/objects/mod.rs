@@ -2,12 +2,18 @@ use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::world::World;
 use raylib::prelude::Vector3;
 
+pub mod atmosphere;
 pub mod celestial;
 
 /// Register all objects in the world.
 pub fn register_all(_world: &mut World) {
+    const BODY_SCALE: f32 = 165.0;
+    let sun_position = Vector3::new(0.0, 0.0, 500.0);
+    let rocky_position = Vector3::new(-300.0, 100.0, 800.0);
+    let gas_position = Vector3::new(350.0, -50.0, 1_000.0);
+
     _world.add(celestial::CelestialBody::new_primary_star_styled(
-        Vector3::new(0.0, 0.0, 500.0),
+        sun_position,
         CelestialStyle {
             noise_offset: Vector3::new(2.1, -0.7, 1.4),
             tint: Vector3::new(1.05, 0.96, 0.82),
@@ -17,7 +23,7 @@ pub fn register_all(_world: &mut World) {
     ));
     _world.add(celestial::CelestialBody::styled(
         CelestialKind::Rocky,
-        Vector3::new(-300.0, 100.0, 800.0),
+        rocky_position,
         CelestialStyle {
             noise_offset: Vector3::new(-3.4, 1.8, 0.6),
             tint: Vector3::new(0.82, 1.0, 1.08),
@@ -28,7 +34,7 @@ pub fn register_all(_world: &mut World) {
     ));
     _world.add(celestial::CelestialBody::styled(
         CelestialKind::GasGiant,
-        Vector3::new(350.0, -50.0, 1_000.0),
+        gas_position,
         CelestialStyle {
             noise_offset: Vector3::new(4.2, 0.9, -2.7),
             tint: Vector3::new(1.08, 0.88, 0.72),
@@ -36,6 +42,27 @@ pub fn register_all(_world: &mut World) {
             rotation_speed: 0.11,
             ..CelestialStyle::default()
         },
+    ));
+    _world.add(atmosphere::Atmosphere::new(
+        sun_position,
+        BODY_SCALE,
+        1.16,
+        Vector3::new(1.0, 0.34, 0.04),
+        0.1,
+    ));
+    _world.add(atmosphere::Atmosphere::new(
+        rocky_position,
+        BODY_SCALE,
+        1.07,
+        Vector3::new(0.16, 0.52, 1.0),
+        0.1,
+    ));
+    _world.add(atmosphere::Atmosphere::new(
+        gas_position,
+        BODY_SCALE,
+        1.05,
+        Vector3::new(1.0, 0.58, 0.18),
+        0.10,
     ));
 }
 
