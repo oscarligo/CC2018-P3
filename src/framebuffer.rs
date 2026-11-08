@@ -40,20 +40,48 @@ impl Framebuffer {
     }
 
     pub fn point(&mut self, x: i32, y: i32, depth: f32, color: Vector3) {
+        self.blend_point(x, y, depth, color, 1.0, true);
+    }
+
+    pub fn blend_point(
+        &mut self,
+        x: i32,
+        y: i32,
+        depth: f32,
+        color: Vector3,
+        alpha: f32,
+        write_depth: bool,
+    ) {
+        let alpha = alpha.clamp(0.0, 1.0);
+        if alpha <= 0.0 {
+            return;
+        }
         if x >= 0 && x < self.width as i32 && y >= 0 && y < self.height as i32 {
             let index = y as usize * self.width as usize + x as usize;
             if depth >= self.depth_buffer[index] {
                 return;
             }
-            self.depth_buffer[index] = depth;
-            let color = Color::new(
-                (color.x.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
-                (color.y.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
-                (color.z.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
-                OPAQUE_ALPHA,
-            );
+            if write_depth {
+                self.depth_buffer[index] = depth;
+            }
             let pixel = &mut self.pixels[index * CHANNELS_PER_PIXEL..][..CHANNELS_PER_PIXEL];
-            pixel.copy_from_slice(&[color.r, color.g, color.b, color.a]);
+            if alpha >= 1.0 {
+                pixel.copy_from_slice(&[
+                    (color.x.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                    (color.y.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                    (color.z.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX) as u8,
+                    OPAQUE_ALPHA,
+                ]);
+                return;
+            }
+            let inverse_alpha = 1.0 - alpha;
+            pixel[0] = (color.x.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX * alpha
+                + pixel[0] as f32 * inverse_alpha) as u8;
+            pixel[1] = (color.y.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX * alpha
+                + pixel[1] as f32 * inverse_alpha) as u8;
+            pixel[2] = (color.z.clamp(0.0, 1.0) * COLOR_CHANNEL_MAX * alpha
+                + pixel[2] as f32 * inverse_alpha) as u8;
+            pixel[3] = OPAQUE_ALPHA;
         }
     }
 
@@ -102,5 +130,15 @@ mod tests {
             .pixels
             .chunks_exact(CHANNELS_PER_PIXEL)
             .all(|pixel| pixel == [1, 2, 3, 255]));
+    }
+
+    #[test]
+    fn transparent_points_blend_without_occluding_later_geometry() {
+        let mut framebuffer = Framebuffer::new(1, 1, Color::BLACK);
+        framebuffer.blend_point(0, 0, 1.0, Vector3::new(1.0, 0.0, 0.0), 0.5, false);
+        assert_eq!(&framebuffer.pixels[..4], &[127, 0, 0, 255]);
+
+        framebuffer.point(0, 0, 2.0, Vector3::new(0.0, 1.0, 0.0));
+        assert_eq!(&framebuffer.pixels[..4], &[0, 255, 0, 255]);
     }
 }

@@ -54,12 +54,35 @@ impl Renderer {
         self.render_internal(framebuffer, uniforms, mesh, Some(colors));
     }
 
+    pub fn render_colored_transparent(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        colors: &[raylib::prelude::Vector3],
+        alpha: f32,
+    ) {
+        assert_eq!(colors.len(), mesh.vertices.len());
+        self.render_internal_with_alpha(framebuffer, uniforms, mesh, Some(colors), alpha);
+    }
+
     fn render_internal(
         &mut self,
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
         mesh: &Mesh,
         colors: Option<&[raylib::prelude::Vector3]>,
+    ) {
+        self.render_internal_with_alpha(framebuffer, uniforms, mesh, colors, 1.0);
+    }
+
+    fn render_internal_with_alpha(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        colors: Option<&[raylib::prelude::Vector3]>,
+        alpha: f32,
     ) {
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
@@ -113,7 +136,7 @@ impl Renderer {
                     return;
                 };
                 shaded_fragments += 1;
-                framebuffer.point(x, y, fragment.depth, color);
+                framebuffer.blend_point(x, y, fragment.depth, color, alpha, alpha >= 1.0);
             },
         );
         self.metrics.rasterization += stage_start.elapsed();
