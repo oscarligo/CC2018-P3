@@ -33,3 +33,5 @@ Los triángulos que atraviesan el plano cercano de la cámara se recortan conser
 Los cambios de LOD usan umbrales distintos de entrada y salida para evitar oscilaciones cuando un cuerpo permanece cerca de un límite.
 
 Los planetas reciben iluminación desde la posición real de la estrella primaria registrada en el mundo.
+
+Cada cuerpo puede configurar semilla procedural, tinte, cobertura de nubes y velocidades de animación y rotación mediante `CelestialStyle`.

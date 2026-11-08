@@ -2,10 +2,10 @@ use super::color_mix;
 use crate::noise::{fbm, smoothstep};
 use raylib::prelude::Vector3;
 
-pub fn shade(point: Vector3, time: f32) -> Vector3 {
+pub fn shade(point: Vector3, time: f32, noise_offset: Vector3) -> Vector3 {
     let flow = Vector3::new(time * 0.08, -time * 0.035, time * 0.05);
-    let cells = fbm(point * 3.4 + flow, 4);
-    let granules = fbm(point * 14.0 - flow * 1.7, 3);
+    let cells = fbm(point * 3.4 + flow + noise_offset, 4);
+    let granules = fbm(point * 14.0 - flow * 1.7 + noise_offset * 2.3, 3);
     let filaments = ((point.y * 18.0 + cells * 7.0 + time * 0.35).sin() * 0.5 + 0.5) * 0.18;
     let heat = (cells * 0.58 + granules * 0.30 + filaments).clamp(0.0, 1.0);
 

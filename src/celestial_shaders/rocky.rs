@@ -25,9 +25,15 @@ pub fn shade(
     normal: Vector3,
     time: f32,
     light_direction: Vector3,
+    noise_offset: Vector3,
+    cloud_threshold: f32,
 ) -> Vector3 {
     let cloud_flow = Vector3::new(time * 0.035, 0.0, -time * 0.02);
-    let clouds = smoothstep(0.59, 0.70, fbm(point * 6.0 + cloud_flow, 4)) * 0.78;
+    let clouds = smoothstep(
+        cloud_threshold,
+        cloud_threshold + 0.11,
+        fbm(point * 6.0 + cloud_flow + noise_offset, 4),
+    ) * 0.78;
     lit(
         color_mix(surface, Vector3::new(0.92, 0.94, 0.95), clouds),
         normal,

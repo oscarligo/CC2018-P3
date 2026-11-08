@@ -2,8 +2,17 @@ use super::{color_mix, lit};
 use crate::noise::{fbm, smoothstep};
 use raylib::prelude::Vector3;
 
-pub fn shade(point: Vector3, normal: Vector3, time: f32, light_direction: Vector3) -> Vector3 {
-    let turbulence = fbm(point * 4.5 + Vector3::new(time * 0.025, 0.0, 0.0), 4);
+pub fn shade(
+    point: Vector3,
+    normal: Vector3,
+    time: f32,
+    light_direction: Vector3,
+    noise_offset: Vector3,
+) -> Vector3 {
+    let turbulence = fbm(
+        point * 4.5 + Vector3::new(time * 0.025, 0.0, 0.0) + noise_offset,
+        4,
+    );
     let latitude = point.y + (turbulence - 0.5) * 0.24;
     let wave = (latitude * 25.0 + (point.x * 5.0 + time * 0.18).sin() * 0.55).sin();
     let band = smoothstep(-0.78, 0.78, wave);

@@ -1,4 +1,4 @@
-use crate::celestial_shaders::CelestialKind;
+use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::{Material, Mesh};
 use crate::projection::projected_sphere_radius;
@@ -12,7 +12,6 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 const BODY_SCALE: f32 = 165.0;
-const ROTATION_SPEED: f32 = 0.08;
 const HIGH_LATITUDE_SEGMENTS: usize = 36;
 const HIGH_LONGITUDE_SEGMENTS: usize = 54;
 const MEDIUM_LATITUDE_SEGMENTS: usize = 18;
@@ -44,18 +43,32 @@ pub struct CelestialBody {
     surface_dirty: bool,
     primary_light: bool,
     light_direction: Vector3,
+    style: CelestialStyle,
 }
 
 impl CelestialBody {
     pub fn new(kind: CelestialKind, position: Vector3) -> Self {
-        Self::new_with_light(kind, position, false)
+        Self::styled(kind, position, CelestialStyle::default())
+    }
+
+    pub fn styled(kind: CelestialKind, position: Vector3, style: CelestialStyle) -> Self {
+        Self::new_with_light(kind, position, false, style)
     }
 
     pub fn new_primary_star(position: Vector3) -> Self {
-        Self::new_with_light(CelestialKind::Star, position, true)
+        Self::new_primary_star_styled(position, CelestialStyle::default())
     }
 
-    fn new_with_light(kind: CelestialKind, position: Vector3, primary_light: bool) -> Self {
+    pub fn new_primary_star_styled(position: Vector3, style: CelestialStyle) -> Self {
+        Self::new_with_light(CelestialKind::Star, position, true, style)
+    }
+
+    fn new_with_light(
+        kind: CelestialKind,
+        position: Vector3,
+        primary_light: bool,
+        style: CelestialStyle,
+    ) -> Self {
         let lod = SphereLod::Low;
         let mesh = sphere_mesh(lod);
         let mut body = Self {
@@ -72,6 +85,7 @@ impl CelestialBody {
             surface_dirty: false,
             primary_light,
             light_direction: Vector3::new(0.0, 1.0, 0.0),
+            style,
         };
         body.update_surface();
         body
@@ -115,6 +129,7 @@ impl CelestialBody {
                 self.time,
                 base_colors.map(|colors| colors[index]),
                 self.light_direction,
+                self.style,
             );
         }
     }
@@ -183,8 +198,8 @@ impl WorldObject for CelestialBody {
     }
 
     fn update(&mut self, update: &WorldUpdate) {
-        self.time += update.frame_time;
-        self.rotation = (self.rotation + ROTATION_SPEED * update.frame_time) % TAU;
+        self.time += update.frame_time * self.style.animation_speed;
+        self.rotation = (self.rotation + self.style.rotation_speed * update.frame_time) % TAU;
         self.surface_elapsed += update.frame_time;
     }
 
