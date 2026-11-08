@@ -13,6 +13,7 @@ const PITCH_UP_KEY: KeyboardKey = KeyboardKey::KEY_S;
 const PITCH_DOWN_KEY: KeyboardKey = KeyboardKey::KEY_W;
 const TURN_LEFT_KEY: KeyboardKey = KeyboardKey::KEY_A;
 const TURN_RIGHT_KEY: KeyboardKey = KeyboardKey::KEY_D;
+const INTERACT_KEY: KeyboardKey = KeyboardKey::KEY_F;
 
 const ORBIT_BUTTON: MouseButton = MouseButton::MOUSE_BUTTON_RIGHT;
 
@@ -26,6 +27,7 @@ pub struct InputState {
     pub thrust: bool,
     pub boost: bool,
     pub braking: bool,
+    pub interact_pressed: bool,
     pub mouse_delta: Vector2,
     pub orbiting: bool,
     pub zoom_delta: f32,
@@ -48,6 +50,7 @@ impl InputState {
             thrust,
             boost,
             braking,
+            interact_pressed: window.is_key_pressed(INTERACT_KEY),
             mouse_delta: window.get_mouse_delta(),
             orbiting,
             zoom_delta: window.get_mouse_wheel_move(),

@@ -17,6 +17,7 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `A` / `D`: girar a izquierda / derecha respecto a la nave.
 - `Q` / `E`: inclinarse y acompañar el giro.
+- `F`: interactuar con el cuerpo apuntado desde el centro de la cámara.
 - `Espacio`: acelerar; al soltarlo se pierde velocidad gradualmente.
 - `Shift izquierdo`: frenar.
 - Clic derecho + movimiento del ratón: orbitar la cámara alrededor de la nave.
@@ -57,3 +58,5 @@ El gigante gaseoso utiliza una malla anular transparente, compartida y de doble 
 Los planetas usan órbitas inclinadas. Sus atmósferas, anillos y futuros elementos se conectan mediante anclas padre-hijo; posición, rotación y escala locales se componen en jerarquía, por lo que siguen al cuerpo sin duplicar parámetros orbitales.
 
 Los cuerpos sólidos tienen identificadores estables y colisionadores esféricos. El mundo ofrece raycast al impacto más cercano y consultas de proximidad sin asignaciones obligatorias por frame. Atmósferas y anillos permanecen fuera de las colisiones.
+
+El sistema de interacción selecciona el primer objeto sólido bajo el centro de la cámara, muestra su acción disponible y presenta una respuesta temporal al activarlo.

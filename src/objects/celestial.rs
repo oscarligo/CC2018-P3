@@ -1,4 +1,5 @@
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
+use crate::interaction::Interaction;
 use crate::physics::Collider;
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::{Material, Mesh};
@@ -304,6 +305,23 @@ impl WorldObject for CelestialBody {
 
     fn collider(&self) -> Option<Collider> {
         Some(Collider::Sphere { radius: 1.0 })
+    }
+
+    fn interaction(&self) -> Option<Interaction> {
+        Some(match self.kind {
+            CelestialKind::Star => Interaction {
+                prompt: "[F] Examinar estrella",
+                response: "La estrella emite la luz principal del sistema.",
+            },
+            CelestialKind::Rocky => Interaction {
+                prompt: "[F] Examinar planeta rocoso",
+                response: "Un mundo rocoso con superficie procedural y atmosfera.",
+            },
+            CelestialKind::GasGiant => Interaction {
+                prompt: "[F] Examinar gigante gaseoso",
+                response: "Un gigante gaseoso rodeado por un sistema de anillos.",
+            },
+        })
     }
 
     fn light_position(&self) -> Option<Vector3> {

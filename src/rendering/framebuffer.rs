@@ -92,7 +92,12 @@ impl Framebuffer {
         depth < self.depth_buffer[y as usize * self.width as usize + x as usize]
     }
 
-    pub fn swap_buffers(&mut self, window: &mut RaylibHandle, raylib_thread: &RaylibThread) {
+    pub fn swap_buffers(
+        &mut self,
+        window: &mut RaylibHandle,
+        raylib_thread: &RaylibThread,
+        overlay: Option<&str>,
+    ) {
         if self.texture.is_none() {
             let image = Image::gen_image_color(
                 self.width as i32,
@@ -108,8 +113,23 @@ impl Framebuffer {
             return;
         }
 
+        const OVERLAY_FONT_SIZE: i32 = 20;
+        let overlay_width = overlay.map(|text| window.measure_text(text, OVERLAY_FONT_SIZE));
         let mut renderer = window.begin_drawing(raylib_thread);
         renderer.draw_texture(texture, 0, 0, Color::WHITE);
+        if let Some((text, width)) = overlay.zip(overlay_width) {
+            const PADDING: i32 = 8;
+            let x = (self.width as i32 - width) / 2;
+            let y = self.height as i32 - OVERLAY_FONT_SIZE - PADDING * 2;
+            renderer.draw_rectangle(
+                x - PADDING,
+                y - PADDING,
+                width + PADDING * 2,
+                OVERLAY_FONT_SIZE + PADDING * 2,
+                Color::new(0, 0, 0, 180),
+            );
+            renderer.draw_text(text, x, y, OVERLAY_FONT_SIZE, Color::RAYWHITE);
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+use crate::interaction::Interaction;
 use crate::physics::{Collider, ObjectId, Ray, RayHit, raycast_sphere, spheres_overlap};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::projection::sphere_is_visible;
@@ -303,6 +304,12 @@ pub trait WorldObject {
     fn collider(&self) -> Option<Collider> {
         None
     }
+    fn interaction(&self) -> Option<Interaction> {
+        None
+    }
+    fn interact(&mut self) -> Option<Interaction> {
+        self.interaction()
+    }
     fn render_pass(&self) -> RenderPass {
         RenderPass::Opaque
     }
@@ -373,6 +380,20 @@ impl World {
             let (object_center, object_radius) = collider_sphere(entry.object.as_ref())?;
             spheres_overlap(center, radius, object_center, object_radius).then_some(entry.id)
         }));
+    }
+
+    pub(crate) fn interaction(&self, id: ObjectId) -> Option<Interaction> {
+        self.objects
+            .iter()
+            .find(|entry| entry.id == id)
+            .and_then(|entry| entry.object.interaction())
+    }
+
+    pub(crate) fn interact(&mut self, id: ObjectId) -> Option<Interaction> {
+        self.objects
+            .iter_mut()
+            .find(|entry| entry.id == id)
+            .and_then(|entry| entry.object.interact())
     }
 
     pub fn draw(

@@ -1,4 +1,5 @@
 mod celestial_shaders;
+mod interaction;
 mod noise;
 pub mod objects;
 mod performance;
@@ -7,6 +8,7 @@ mod rendering;
 mod scene;
 mod ship;
 
+use interaction::InteractionSystem;
 use objects::celestial::CelestialBody;
 use performance::PerformanceMonitor;
 use raylib::prelude::*;
@@ -49,6 +51,7 @@ fn main() {
     let mesh = rendering::load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut renderer = Renderer::default();
     let mut performance = PerformanceMonitor::default();
+    let mut interaction = InteractionSystem::default();
     let starfield = Starfield::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
 
@@ -73,6 +76,7 @@ fn main() {
         movement.update(&input, frame_time, &mut uniforms);
         world.update(&WorldUpdate { frame_time });
         uniforms.light_position = world.primary_light_position();
+        interaction.update(&mut world, &uniforms, input.interact_pressed, frame_time);
         rocket_audio.update(
             input.thrust,
             input.braking,
@@ -91,7 +95,7 @@ fn main() {
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 
-        framebuffer.swap_buffers(&mut window, &thread);
+        framebuffer.swap_buffers(&mut window, &thread, interaction.overlay());
         let mut metrics = renderer.metrics();
         metrics.update = update_time;
         metrics.frame = frame_start.elapsed();
