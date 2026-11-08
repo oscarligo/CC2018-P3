@@ -114,6 +114,7 @@ mod tests {
             camera_pos: Vector3::zero(),
             camera_target: Vector3::new(0.0, 0.0, 1.0),
             camera_up: Vector3::new(0.0, 1.0, 0.0),
+            light_position: None,
         }
     }
 

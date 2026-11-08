@@ -72,6 +72,7 @@ fn main() {
         camera_pos: Vector3::zero(),
         camera_target: Vector3::zero(),
         camera_up: Vector3::new(0.0, 1.0, 0.0),
+        light_position: None,
     };
     let mut movement = ShipMovement::new(&mesh, rocket_audio.moving_duration());
     let mut world = build_solar_system();
@@ -125,6 +126,7 @@ fn run_benchmark(object_count: usize) {
         camera_pos: Vector3::zero(),
         camera_target: Vector3::new(0.0, 0.0, 1.0),
         camera_up: Vector3::new(0.0, 1.0, 0.0),
+        light_position: None,
     };
 
     eprintln!("benchmark: {object_count} objects, {BENCHMARK_FRAMES} frames");
@@ -184,10 +186,12 @@ fn build_benchmark_world(object_count: usize) -> world::World {
             1 => CelestialKind::Rocky,
             _ => CelestialKind::GasGiant,
         };
-        world.add(CelestialBody::new(
-            kind,
-            Vector3::new(horizontal * depth, vertical * depth, depth),
-        ));
+        let position = Vector3::new(horizontal * depth, vertical * depth, depth);
+        if index == 0 {
+            world.add(CelestialBody::new_primary_star(position));
+        } else {
+            world.add(CelestialBody::new(kind, position));
+        }
     }
 
     world

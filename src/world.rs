@@ -38,6 +38,9 @@ pub trait WorldObject {
     fn bounding_radius(&self) -> Option<f32> {
         None
     }
+    fn light_position(&self) -> Option<Vector3> {
+        None
+    }
     fn draw(&mut self, renderer: &mut Renderer, framebuffer: &mut Framebuffer, uniforms: &Uniforms);
 }
 
@@ -55,6 +58,12 @@ impl World {
         self.objects.push(Box::new(object));
     }
 
+    pub(crate) fn primary_light_position(&self) -> Option<Vector3> {
+        self.objects
+            .iter()
+            .find_map(|object| object.light_position())
+    }
+
     pub fn update(&mut self, update: &WorldUpdate) {
         for object in &mut self.objects {
             object.transform_mut().advance(update);
@@ -68,6 +77,11 @@ impl World {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
     ) {
+        let light_position = self.primary_light_position().or(uniforms.light_position);
+        let scene_uniforms = Uniforms {
+            light_position,
+            ..*uniforms
+        };
         self.sort_front_to_back(uniforms.camera_pos);
         for object in &mut self.objects {
             let culled = object.bounding_radius().is_some_and(|local_radius| {
@@ -81,7 +95,7 @@ impl World {
                 !sphere_is_visible(
                     transform.position,
                     local_radius * scale,
-                    uniforms,
+                    &scene_uniforms,
                     framebuffer.width,
                     framebuffer.height,
                 )
@@ -90,7 +104,7 @@ impl World {
             if culled {
                 continue;
             }
-            object.draw(renderer, framebuffer, uniforms);
+            object.draw(renderer, framebuffer, &scene_uniforms);
         }
     }
 

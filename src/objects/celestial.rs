@@ -42,10 +42,20 @@ pub struct CelestialBody {
     time: f32,
     surface_elapsed: f32,
     surface_dirty: bool,
+    primary_light: bool,
+    light_direction: Vector3,
 }
 
 impl CelestialBody {
     pub fn new(kind: CelestialKind, position: Vector3) -> Self {
+        Self::new_with_light(kind, position, false)
+    }
+
+    pub fn new_primary_star(position: Vector3) -> Self {
+        Self::new_with_light(CelestialKind::Star, position, true)
+    }
+
+    fn new_with_light(kind: CelestialKind, position: Vector3, primary_light: bool) -> Self {
         let lod = SphereLod::Low;
         let mesh = sphere_mesh(lod);
         let mut body = Self {
@@ -60,6 +70,8 @@ impl CelestialBody {
             time: 0.0,
             surface_elapsed: 0.0,
             surface_dirty: false,
+            primary_light,
+            light_direction: Vector3::new(0.0, 1.0, 0.0),
         };
         body.update_surface();
         body
@@ -102,6 +114,7 @@ impl CelestialBody {
                 world_normal,
                 self.time,
                 base_colors.map(|colors| colors[index]),
+                self.light_direction,
             );
         }
     }
@@ -143,6 +156,21 @@ impl CelestialBody {
         self.surface_dirty = false;
         true
     }
+
+    fn set_light_position(&mut self, light_position: Option<Vector3>) {
+        let Some(direction) = light_position.map(|position| position - self.transform.position)
+        else {
+            return;
+        };
+        if direction.length() <= f32::EPSILON {
+            return;
+        }
+        let direction = direction.normalize();
+        if (direction - self.light_direction).length() > 0.001 {
+            self.light_direction = direction;
+            self.surface_dirty = true;
+        }
+    }
 }
 
 impl WorldObject for CelestialBody {
@@ -164,6 +192,10 @@ impl WorldObject for CelestialBody {
         Some(1.0)
     }
 
+    fn light_position(&self) -> Option<Vector3> {
+        self.primary_light.then_some(self.transform.position)
+    }
+
     fn draw(
         &mut self,
         renderer: &mut Renderer,
@@ -182,6 +214,7 @@ impl WorldObject for CelestialBody {
         if self.select_lod(radius) {
             renderer.record_lod_switch();
         }
+        self.set_light_position(uniforms.light_position);
         let surface_start = Instant::now();
         if self.update_surface_if_needed() {
             renderer.record_surface_update(surface_start.elapsed());
@@ -191,6 +224,7 @@ impl WorldObject for CelestialBody {
             camera_pos: uniforms.camera_pos,
             camera_target: uniforms.camera_target,
             camera_up: uniforms.camera_up,
+            light_position: uniforms.light_position,
         };
         renderer.render_colored(
             framebuffer,
@@ -353,5 +387,14 @@ mod tests {
         assert!(!body.update_surface_if_needed());
         body.surface_elapsed = LOW_UPDATE_INTERVAL;
         assert!(body.update_surface_if_needed());
+    }
+
+    #[test]
+    fn only_primary_star_exposes_its_light_position() {
+        let position = Vector3::new(1.0, 2.0, 3.0);
+        let primary = CelestialBody::new_primary_star(position);
+        let secondary = CelestialBody::new(CelestialKind::Star, position);
+        assert_eq!(primary.light_position(), Some(position));
+        assert_eq!(secondary.light_position(), None);
     }
 }

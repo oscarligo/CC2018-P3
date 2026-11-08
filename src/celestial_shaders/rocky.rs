@@ -19,11 +19,18 @@ pub fn base_color(point: Vector3) -> Vector3 {
     color_mix(surface, Vector3::new(0.82, 0.91, 0.94), ice)
 }
 
-pub fn shade(surface: Vector3, point: Vector3, normal: Vector3, time: f32) -> Vector3 {
+pub fn shade(
+    surface: Vector3,
+    point: Vector3,
+    normal: Vector3,
+    time: f32,
+    light_direction: Vector3,
+) -> Vector3 {
     let cloud_flow = Vector3::new(time * 0.035, 0.0, -time * 0.02);
     let clouds = smoothstep(0.59, 0.70, fbm(point * 6.0 + cloud_flow, 4)) * 0.78;
     lit(
         color_mix(surface, Vector3::new(0.92, 0.94, 0.95), clouds),
         normal,
+        light_direction,
     )
 }
