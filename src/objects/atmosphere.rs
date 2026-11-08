@@ -46,11 +46,12 @@ impl Atmosphere {
             self.transform.scale.x,
             self.transform.scale.y,
             self.transform.scale.z,
-        ) * Matrix::translate(
-            self.transform.position.x,
-            self.transform.position.y,
-            self.transform.position.z,
-        )
+        ) * self.transform.rotation.to_matrix()
+            * Matrix::translate(
+                self.transform.position.x,
+                self.transform.position.y,
+                self.transform.position.z,
+            )
     }
 
     fn update_fresnel(&mut self, camera_position: Vector3) {

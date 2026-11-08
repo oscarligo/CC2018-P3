@@ -6,7 +6,7 @@ use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
 use crate::scene::world::{Orbit, WorldObject, WorldTransform, WorldUpdate};
-use raylib::prelude::{Matrix, Vector3};
+use raylib::prelude::{Matrix, Quaternion, Vector3};
 use std::f32::consts::{PI, TAU};
 use std::sync::OnceLock;
 use std::time::Instant;
@@ -160,7 +160,7 @@ impl CelestialBody {
             self.transform.scale.x,
             self.transform.scale.y,
             self.transform.scale.z,
-        ) * Matrix::rotate_y(self.rotation)
+        ) * self.transform.rotation.to_matrix()
             * Matrix::translate(
                 self.transform.position.x,
                 self.transform.position.y,
@@ -169,7 +169,7 @@ impl CelestialBody {
     }
 
     fn update_surface(&mut self) {
-        let (sin_rotation, cos_rotation) = self.rotation.sin_cos();
+        let rotation = self.transform.rotation.to_matrix();
         let base_colors = match self.kind {
             CelestialKind::Rocky => Some(rocky_base_colors(self.lod)),
             CelestialKind::Star | CelestialKind::GasGiant => None,
@@ -182,9 +182,9 @@ impl CelestialBody {
         {
             let point = vertex.normal;
             let world_normal = Vector3::new(
-                point.x * cos_rotation + point.z * sin_rotation,
-                point.y,
-                -point.x * sin_rotation + point.z * cos_rotation,
+                rotation.m0 * point.x + rotation.m4 * point.y + rotation.m8 * point.z,
+                rotation.m1 * point.x + rotation.m5 * point.y + rotation.m9 * point.z,
+                rotation.m2 * point.x + rotation.m6 * point.y + rotation.m10 * point.z,
             );
             *color = crate::celestial_shaders::shade(
                 self.kind,
@@ -288,6 +288,11 @@ impl WorldObject for CelestialBody {
     fn update(&mut self, update: &WorldUpdate) {
         self.time += update.frame_time * self.style.animation_speed;
         self.rotation = (self.rotation + self.style.rotation_speed * update.frame_time) % TAU;
+        self.transform
+            .set_local_rotation(Quaternion::from_axis_angle(
+                Vector3::new(0.0, 1.0, 0.0),
+                self.rotation,
+            ));
         self.surface_elapsed += update.frame_time;
         self.advance_lod_transition(update.frame_time);
     }

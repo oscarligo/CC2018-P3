@@ -2,7 +2,7 @@ use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::projection::sphere_is_visible;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
-use raylib::prelude::Vector3;
+use raylib::prelude::{Matrix, Quaternion, Vector3};
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -11,25 +11,91 @@ pub(crate) struct TransformAnchor(Rc<RefCell<AnchorState>>);
 
 struct AnchorState {
     local_position: Vector3,
+    local_rotation: Quaternion,
+    local_scale: Vector3,
     parent: Option<TransformAnchor>,
 }
 
+#[derive(Clone, Copy)]
+struct WorldPose {
+    position: Vector3,
+    rotation: Quaternion,
+    scale: Vector3,
+}
+
 impl TransformAnchor {
-    fn new(position: Vector3) -> Self {
+    fn new(position: Vector3, scale: Vector3) -> Self {
         Self(Rc::new(RefCell::new(AnchorState {
             local_position: position,
+            local_rotation: Quaternion::identity(),
+            local_scale: scale,
             parent: None,
         })))
     }
 
-    fn world_position(&self) -> Vector3 {
+    fn world_pose(&self) -> WorldPose {
         let state = self.0.borrow();
         let local_position = state.local_position;
+        let local_rotation = state.local_rotation;
+        let local_scale = state.local_scale;
         let parent = state.parent.clone();
         drop(state);
-        parent.map_or(local_position, |parent| {
-            parent.world_position() + local_position
-        })
+        parent.map_or(
+            WorldPose {
+                position: local_position,
+                rotation: local_rotation,
+                scale: local_scale,
+            },
+            |parent| {
+                let parent = parent.world_pose();
+                WorldPose {
+                    position: parent.position
+                        + transform_direction(
+                            &parent.rotation.to_matrix(),
+                            multiply_components(local_position, parent.scale),
+                        ),
+                    rotation: (parent.rotation * local_rotation).normalize(),
+                    scale: multiply_components(parent.scale, local_scale),
+                }
+            },
+        )
+    }
+
+    fn set_local_pose(&self, position: Vector3, rotation: Quaternion, scale: Vector3) {
+        let mut state = self.0.borrow_mut();
+        state.local_position = position;
+        state.local_rotation = rotation;
+        state.local_scale = scale;
+    }
+
+    fn set_local_rotation(&self, rotation: Quaternion) {
+        self.0.borrow_mut().local_rotation = rotation;
+    }
+
+    fn set_local_scale(&self, scale: Vector3) {
+        self.0.borrow_mut().local_scale = scale;
+    }
+
+    fn parent_pose(&self) -> Option<WorldPose> {
+        self.0
+            .borrow()
+            .parent
+            .clone()
+            .map(|parent| parent.world_pose())
+    }
+
+    fn set_world_scale_preserving_parent(&self, scale: Vector3) {
+        let local_scale = self
+            .parent_pose()
+            .map_or(scale, |parent| divide_components(scale, parent.scale));
+        self.set_local_scale(local_scale);
+    }
+
+    fn set_world_rotation_preserving_parent(&self, rotation: Quaternion) {
+        let local_rotation = self.parent_pose().map_or(rotation, |parent| {
+            (parent.rotation.invert() * rotation).normalize()
+        });
+        self.set_local_rotation(local_rotation);
     }
 
     fn contains(&self, target: &Self) -> bool {
@@ -66,9 +132,37 @@ impl TransformAnchor {
     }
 }
 
+fn multiply_components(a: Vector3, b: Vector3) -> Vector3 {
+    Vector3::new(a.x * b.x, a.y * b.y, a.z * b.z)
+}
+
+fn divide_components(value: Vector3, divisor: Vector3) -> Vector3 {
+    fn divide(value: f32, divisor: f32) -> f32 {
+        if divisor.abs() > f32::EPSILON {
+            value / divisor
+        } else {
+            value
+        }
+    }
+    Vector3::new(
+        divide(value.x, divisor.x),
+        divide(value.y, divisor.y),
+        divide(value.z, divisor.z),
+    )
+}
+
+fn transform_direction(matrix: &Matrix, direction: Vector3) -> Vector3 {
+    Vector3::new(
+        matrix.m0 * direction.x + matrix.m4 * direction.y + matrix.m8 * direction.z,
+        matrix.m1 * direction.x + matrix.m5 * direction.y + matrix.m9 * direction.z,
+        matrix.m2 * direction.x + matrix.m6 * direction.y + matrix.m10 * direction.z,
+    )
+}
+
 /// Estado espacial común para cualquier entidad del mundo.
 pub struct WorldTransform {
     pub position: Vector3,
+    pub rotation: Quaternion,
     pub velocity: Vector3,
     pub scale: Vector3,
     orbit: Option<Orbit>,
@@ -117,11 +211,12 @@ impl WorldTransform {
     pub fn new(position: Vector3, scale: Vector3) -> Self {
         Self {
             position,
+            rotation: Quaternion::identity(),
             velocity: Vector3::zero(),
             scale,
             orbit: None,
             orbit_time: 0.0,
-            anchor: TransformAnchor::new(position),
+            anchor: TransformAnchor::new(position, scale),
         }
     }
 
@@ -134,7 +229,20 @@ impl WorldTransform {
         self.orbit_time = 0.0;
         self.anchor.set_local_position(local_position);
         self.anchor.set_parent(Some(parent));
-        self.position = self.anchor.world_position();
+        self.anchor.set_world_scale_preserving_parent(self.scale);
+        self.anchor
+            .set_world_rotation_preserving_parent(self.rotation);
+        self.resolve_world_transform();
+    }
+
+    pub(crate) fn set_local_rotation(&mut self, rotation: Quaternion) {
+        self.anchor.set_local_rotation(rotation);
+        self.resolve_world_transform();
+    }
+
+    pub fn set_local_scale(&mut self, scale: Vector3) {
+        self.anchor.set_local_scale(scale);
+        self.resolve_world_transform();
     }
 
     pub fn set_orbit(&mut self, orbit: Orbit) {
@@ -142,7 +250,8 @@ impl WorldTransform {
         self.orbit = Some(orbit);
         self.orbit_time = 0.0;
         self.position = orbit.position(0.0);
-        self.anchor.set_local_position(self.position);
+        self.anchor
+            .set_local_pose(self.position, self.rotation, self.scale);
     }
 
     fn advance(&mut self, update: &WorldUpdate) {
@@ -156,11 +265,15 @@ impl WorldTransform {
             self.position = orbit.position(self.orbit_time);
         }
         self.position += self.velocity * update.frame_time;
-        self.anchor.set_local_position(self.position);
+        self.anchor
+            .set_local_pose(self.position, self.rotation, self.scale);
     }
 
-    fn resolve_world_position(&mut self) {
-        self.position = self.anchor.world_position();
+    fn resolve_world_transform(&mut self) {
+        let pose = self.anchor.world_pose();
+        self.position = pose.position;
+        self.rotation = pose.rotation;
+        self.scale = pose.scale;
     }
 }
 
@@ -218,7 +331,7 @@ impl World {
             object.update(update);
         }
         for object in &mut self.objects {
-            object.transform_mut().resolve_world_position();
+            object.transform_mut().resolve_world_transform();
         }
     }
 
@@ -325,6 +438,7 @@ mod tests {
     use super::*;
     use raylib::prelude::{Color, Matrix};
     use std::cell::RefCell;
+    use std::f32::consts::PI;
     use std::rc::Rc;
 
     struct TestObject {
@@ -473,8 +587,8 @@ mod tests {
             };
             child.advance(&update);
             parent.advance(&update);
-            parent.resolve_world_position();
-            child.resolve_world_position();
+            parent.resolve_world_transform();
+            child.resolve_world_transform();
         }
 
         assert!((child.position - parent.position - offset).length() < 0.0001);
@@ -495,8 +609,34 @@ mod tests {
         grandchild.advance(&update);
         child.advance(&update);
         root.advance(&update);
-        grandchild.resolve_world_position();
+        grandchild.resolve_world_transform();
 
         assert_eq!(grandchild.position, Vector3::new(17.0, 3.0, 0.0));
+    }
+
+    #[test]
+    fn children_inherit_parent_rotation_and_scale() {
+        let scale = Vector3::new(1.0, 1.0, 1.0);
+        let mut parent = WorldTransform::new(Vector3::new(5.0, 0.0, 0.0), scale);
+        let mut child = WorldTransform::new(Vector3::zero(), scale);
+        child.set_parent(parent.anchor(), Vector3::new(1.0, 0.0, 0.0));
+        parent.set_local_rotation(Quaternion::from_axis_angle(
+            Vector3::new(0.0, 1.0, 0.0),
+            PI / 2.0,
+        ));
+        parent.set_local_scale(Vector3::new(2.0, 2.0, 2.0));
+        parent.advance(&WorldUpdate { frame_time: 0.0 });
+        child.resolve_world_transform();
+
+        assert!(
+            ((child.position - parent.position).length() - 2.0).abs() < 0.0001,
+            "parent={:?} child={:?}",
+            parent.position,
+            child.position
+        );
+        assert_eq!(child.scale, Vector3::new(2.0, 2.0, 2.0));
+        let child_forward =
+            transform_direction(&child.rotation.to_matrix(), Vector3::new(0.0, 0.0, 1.0));
+        assert!((child_forward - Vector3::new(1.0, 0.0, 0.0)).length() < 0.0001);
     }
 }

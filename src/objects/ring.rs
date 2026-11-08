@@ -42,6 +42,7 @@ impl PlanetRing {
             self.transform.scale.z,
         ) * Matrix::rotate_x(self.tilt_x)
             * Matrix::rotate_z(self.tilt_z)
+            * self.transform.rotation.to_matrix()
             * Matrix::translate(
                 self.transform.position.x,
                 self.transform.position.y,
