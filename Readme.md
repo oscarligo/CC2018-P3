@@ -66,3 +66,5 @@ El planeta rocoso incluye formaciones de baja geometría distribuidas sobre su s
 Su cuerpo usa una deformación estática determinista con elevaciones y depresiones. Cada LOD mantiene una versión equivalente de la forma, con normales recalculadas y transición geométrica entre niveles.
 
 El gigante gaseoso usa un perfil achatado, con ecuador más ancho y polos comprimidos. Su atmósfera reutiliza las mismas mallas de forma para mantener un grosor visual coherente.
+
+El sistema también contiene un asteroide pequeño, alargado e irregular. Usa una paleta mineral sin nubes, rota de forma independiente y puede localizarse e inspeccionarse con el sistema de interacción.

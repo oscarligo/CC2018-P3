@@ -14,6 +14,7 @@ pub fn register_all(_world: &mut World) {
     let sun_position = Vector3::new(0.0, 0.0, 500.0);
     let rocky_position = Vector3::new(-300.0, 100.0, 800.0);
     let gas_position = Vector3::new(1550.0, -50.0, 3000.0);
+    let asteroid_position = Vector3::new(420.0, -180.0, 1250.0);
     let rocky_orbit = Orbit::new(
         sun_position,
         rocky_position,
@@ -65,10 +66,24 @@ pub fn register_all(_world: &mut World) {
     .with_shape(BodyShape::Oblate)
     .with_orbit(gas_orbit);
     let gas_anchor = gas.transform.anchor();
+    let asteroid = celestial::CelestialBody::styled(
+        CelestialKind::Rocky,
+        asteroid_position,
+        CelestialStyle {
+            noise_offset: Vector3::new(-1.6, 4.1, 2.3),
+            tint: Vector3::new(0.72, 0.68, 0.62),
+            cloud_threshold: 1.0,
+            rotation_speed: 0.16,
+            ..CelestialStyle::default()
+        },
+    )
+    .with_shape(BodyShape::Asteroid)
+    .with_scale(58.0);
 
     _world.add(sun);
     _world.add(rocky);
     _world.add(gas);
+    _world.add(asteroid);
     let rock_directions = [
         Vector3::new(0.0, 0.0, -1.0),
         Vector3::new(-0.55, 0.20, -0.81),

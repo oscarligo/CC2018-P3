@@ -41,6 +41,7 @@ pub enum BodyShape {
     Sphere,
     Rocky,
     Oblate,
+    Asteroid,
 }
 
 struct LodTransition {
@@ -157,6 +158,12 @@ impl CelestialBody {
         self
     }
 
+    pub fn with_scale(mut self, scale: f32) -> Self {
+        self.transform
+            .set_local_scale(Vector3::new(scale, scale, scale));
+        self
+    }
+
     fn new_with_light(
         kind: CelestialKind,
         position: Vector3,
@@ -204,6 +211,9 @@ impl CelestialBody {
     fn update_surface(&mut self) {
         let rotation = self.transform.rotation.to_matrix();
         let base_colors = match self.kind {
+            CelestialKind::Rocky if self.shape == BodyShape::Asteroid => {
+                Some(asteroid_base_colors(self.lod))
+            }
             CelestialKind::Rocky => Some(rocky_base_colors(self.lod)),
             CelestialKind::Star | CelestialKind::GasGiant => None,
         };
@@ -349,9 +359,15 @@ impl WorldObject for CelestialBody {
                 prompt: "[F] Examinar estrella",
                 response: "La estrella emite la luz principal del sistema.",
             },
-            CelestialKind::Rocky => Interaction {
-                prompt: "[F] Examinar planeta rocoso",
-                response: "Un mundo rocoso con superficie procedural y atmosfera.",
+            CelestialKind::Rocky => match self.shape {
+                BodyShape::Asteroid => Interaction {
+                    prompt: "[F] Examinar asteroide",
+                    response: "Un cuerpo pequeno, alargado y cubierto de roca irregular.",
+                },
+                BodyShape::Sphere | BodyShape::Rocky | BodyShape::Oblate => Interaction {
+                    prompt: "[F] Examinar planeta rocoso",
+                    response: "Un mundo rocoso con superficie procedural y atmosfera.",
+                },
             },
             CelestialKind::GasGiant => Interaction {
                 prompt: "[F] Examinar gigante gaseoso",
@@ -454,6 +470,7 @@ pub(crate) fn body_mesh(lod: SphereLod, shape: BodyShape) -> &'static Mesh {
         BodyShape::Sphere => sphere_mesh(lod),
         BodyShape::Rocky => rocky_mesh(lod),
         BodyShape::Oblate => oblate_mesh(lod),
+        BodyShape::Asteroid => asteroid_mesh(lod),
     }
 }
 
@@ -469,6 +486,22 @@ fn oblate_mesh(lod: SphereLod) -> &'static Mesh {
             .get_or_init(|| build_oblate_mesh(MEDIUM_LATITUDE_SEGMENTS, MEDIUM_LONGITUDE_SEGMENTS)),
         SphereLod::Low => {
             LOW.get_or_init(|| build_oblate_mesh(LOW_LATITUDE_SEGMENTS, LOW_LONGITUDE_SEGMENTS))
+        }
+    }
+}
+
+fn asteroid_mesh(lod: SphereLod) -> &'static Mesh {
+    static HIGH: OnceLock<Mesh> = OnceLock::new();
+    static MEDIUM: OnceLock<Mesh> = OnceLock::new();
+    static LOW: OnceLock<Mesh> = OnceLock::new();
+    match lod {
+        SphereLod::High => HIGH
+            .get_or_init(|| build_asteroid_mesh(HIGH_LATITUDE_SEGMENTS, HIGH_LONGITUDE_SEGMENTS)),
+        SphereLod::Medium => MEDIUM.get_or_init(|| {
+            build_asteroid_mesh(MEDIUM_LATITUDE_SEGMENTS, MEDIUM_LONGITUDE_SEGMENTS)
+        }),
+        SphereLod::Low => {
+            LOW.get_or_init(|| build_asteroid_mesh(LOW_LATITUDE_SEGMENTS, LOW_LONGITUDE_SEGMENTS))
         }
     }
 }
@@ -505,6 +538,19 @@ fn shape_radius(direction: Vector3, shape: BodyShape) -> f32 {
                 + direction.y * direction.y / (POLAR_RADIUS * POLAR_RADIUS))
                 .sqrt()
         }
+        BodyShape::Asteroid => {
+            const AXIS_X: f32 = 1.28;
+            const AXIS_Y: f32 = 0.72;
+            const AXIS_Z: f32 = 0.88;
+            let ellipsoid = 1.0
+                / (direction.x * direction.x / (AXIS_X * AXIS_X)
+                    + direction.y * direction.y / (AXIS_Y * AXIS_Y)
+                    + direction.z * direction.z / (AXIS_Z * AXIS_Z))
+                    .sqrt();
+            let broad = crate::noise::fbm(direction * 2.3 + Vector3::new(-3.1, 0.8, 2.6), 4);
+            let detail = crate::noise::fbm(direction * 9.1 + Vector3::new(1.7, -2.2, 0.4), 2);
+            ellipsoid * (0.82 + broad * 0.28 + detail * 0.08)
+        }
     }
 }
 
@@ -513,6 +559,7 @@ fn shape_bound(shape: BodyShape) -> f32 {
         BodyShape::Sphere => 1.0,
         BodyShape::Rocky => 1.12,
         BodyShape::Oblate => 1.05,
+        BodyShape::Asteroid => 1.52,
     }
 }
 
@@ -534,6 +581,15 @@ fn build_oblate_mesh(latitude_segments: usize, longitude_segments: usize) -> Mes
             vertex.position.y * 0.82,
             vertex.position.z * 1.05,
         );
+    }
+    recalculate_normals(&mut mesh);
+    mesh
+}
+
+fn build_asteroid_mesh(latitude_segments: usize, longitude_segments: usize) -> Mesh {
+    let mut mesh = build_sphere_mesh(latitude_segments, longitude_segments);
+    for vertex in &mut mesh.vertices {
+        vertex.position = vertex.normal * shape_radius(vertex.normal, BodyShape::Asteroid);
     }
     recalculate_normals(&mut mesh);
     mesh
@@ -585,6 +641,32 @@ fn rocky_base_colors(lod: SphereLod) -> &'static [Vector3] {
         SphereLod::Low => LOW.get_or_init(|| build_rocky_base_colors(SphereLod::Low)),
     };
     colors.as_slice()
+}
+
+fn asteroid_base_colors(lod: SphereLod) -> &'static [Vector3] {
+    static HIGH: OnceLock<Vec<Vector3>> = OnceLock::new();
+    static MEDIUM: OnceLock<Vec<Vector3>> = OnceLock::new();
+    static LOW: OnceLock<Vec<Vector3>> = OnceLock::new();
+    let colors = match lod {
+        SphereLod::High => HIGH.get_or_init(|| build_asteroid_base_colors(SphereLod::High)),
+        SphereLod::Medium => MEDIUM.get_or_init(|| build_asteroid_base_colors(SphereLod::Medium)),
+        SphereLod::Low => LOW.get_or_init(|| build_asteroid_base_colors(SphereLod::Low)),
+    };
+    colors.as_slice()
+}
+
+fn build_asteroid_base_colors(lod: SphereLod) -> Vec<Vector3> {
+    body_mesh(lod, BodyShape::Asteroid)
+        .vertices
+        .iter()
+        .map(|vertex| {
+            let point = vertex.position.normalize();
+            let mineral = crate::noise::fbm(point * 6.2 + Vector3::new(1.3, -2.7, 0.9), 3);
+            let dark = Vector3::new(0.22, 0.20, 0.18);
+            let light = Vector3::new(0.52, 0.47, 0.40);
+            dark + (light - dark) * mineral
+        })
+        .collect()
 }
 
 fn build_rocky_base_colors(lod: SphereLod) -> Vec<Vector3> {
@@ -777,6 +859,34 @@ mod tests {
 
         assert!((equatorial_radius - 1.05).abs() < 0.001);
         assert!((polar_radius - 0.82).abs() < 0.001);
+        assert!(
+            mesh.vertices
+                .iter()
+                .all(|vertex| (vertex.normal.length() - 1.0).abs() < 0.001)
+        );
+    }
+
+    #[test]
+    fn asteroid_shape_is_elongated_irregular_and_bounded() {
+        let mesh = body_mesh(SphereLod::High, BodyShape::Asteroid);
+        let extent_x = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.x.abs())
+            .fold(0.0, f32::max);
+        let extent_y = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.y.abs())
+            .fold(0.0, f32::max);
+        let maximum_radius = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.length())
+            .fold(0.0, f32::max);
+
+        assert!(extent_x > extent_y * 1.4);
+        assert!(maximum_radius <= shape_bound(BodyShape::Asteroid));
         assert!(
             mesh.vertices
                 .iter()

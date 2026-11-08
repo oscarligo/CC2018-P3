@@ -186,6 +186,7 @@ fn build_benchmark_world(object_count: usize) -> World {
         } else {
             let body = CelestialBody::new(kind, position);
             world.add(match kind {
+                CelestialKind::Rocky if index % 6 == 4 => body.with_shape(BodyShape::Asteroid),
                 CelestialKind::Rocky => body.with_shape(BodyShape::Rocky),
                 CelestialKind::GasGiant => body.with_shape(BodyShape::Oblate),
                 CelestialKind::Star => body,
