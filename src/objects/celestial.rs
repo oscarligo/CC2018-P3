@@ -5,7 +5,7 @@ use crate::projection::projected_sphere_radius;
 use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
-use crate::world::{WorldObject, WorldTransform, WorldUpdate};
+use crate::world::{Orbit, WorldObject, WorldTransform, WorldUpdate};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::{PI, TAU};
 use std::sync::OnceLock;
@@ -61,6 +61,11 @@ impl CelestialBody {
 
     pub fn new_primary_star_styled(position: Vector3, style: CelestialStyle) -> Self {
         Self::new_with_light(CelestialKind::Star, position, true, style)
+    }
+
+    pub fn with_orbit(mut self, orbit: Orbit) -> Self {
+        self.transform.set_orbit(orbit);
+        self
     }
 
     fn new_with_light(

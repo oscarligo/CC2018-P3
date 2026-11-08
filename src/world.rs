@@ -9,6 +9,45 @@ pub struct WorldTransform {
     pub position: Vector3,
     pub velocity: Vector3,
     pub scale: Vector3,
+    orbit: Option<Orbit>,
+    orbit_time: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct Orbit {
+    center: Vector3,
+    initial_offset: Vector3,
+    axis: Vector3,
+    angular_speed: f32,
+}
+
+impl Orbit {
+    pub fn new(
+        center: Vector3,
+        initial_position: Vector3,
+        axis: Vector3,
+        angular_speed: f32,
+    ) -> Self {
+        Self {
+            center,
+            initial_offset: initial_position - center,
+            axis: if axis.length() > f32::EPSILON {
+                axis.normalize()
+            } else {
+                Vector3::new(0.0, 1.0, 0.0)
+            },
+            angular_speed,
+        }
+    }
+
+    fn position(&self, time: f32) -> Vector3 {
+        let angle = self.angular_speed * time;
+        let (sin, cos) = angle.sin_cos();
+        let offset = self.initial_offset * cos
+            + self.axis.cross(self.initial_offset) * sin
+            + self.axis * self.axis.dot(self.initial_offset) * (1.0 - cos);
+        self.center + offset
+    }
 }
 
 impl WorldTransform {
@@ -17,10 +56,22 @@ impl WorldTransform {
             position,
             velocity: Vector3::zero(),
             scale,
+            orbit: None,
+            orbit_time: 0.0,
         }
     }
 
+    pub fn set_orbit(&mut self, orbit: Orbit) {
+        self.orbit = Some(orbit);
+        self.orbit_time = 0.0;
+        self.position = orbit.position(0.0);
+    }
+
     fn advance(&mut self, update: &WorldUpdate) {
+        if let Some(orbit) = self.orbit {
+            self.orbit_time += update.frame_time;
+            self.position = orbit.position(self.orbit_time);
+        }
         self.position += self.velocity * update.frame_time;
     }
 }
@@ -312,5 +363,27 @@ mod tests {
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         assert_eq!(*order.borrow(), [30.0, 20.0, 10.0]);
+    }
+
+    #[test]
+    fn shared_orbit_parameters_keep_grouped_transforms_synchronized() {
+        let center = Vector3::new(0.0, 0.0, 5.0);
+        let initial = Vector3::new(10.0, 2.0, 5.0);
+        let orbit = Orbit::new(center, initial, Vector3::new(0.2, 1.0, 0.1), 0.5);
+        let mut body = WorldTransform::new(initial, Vector3::new(1.0, 1.0, 1.0));
+        let mut atmosphere = WorldTransform::new(initial, Vector3::new(1.1, 1.1, 1.1));
+        body.set_orbit(orbit);
+        atmosphere.set_orbit(orbit);
+
+        for _ in 0..120 {
+            let update = WorldUpdate {
+                frame_time: 1.0 / 60.0,
+            };
+            body.advance(&update);
+            atmosphere.advance(&update);
+        }
+
+        assert!((body.position - atmosphere.position).length() < 0.0001);
+        assert!(((body.position - center).length() - (initial - center).length()).abs() < 0.001);
     }
 }

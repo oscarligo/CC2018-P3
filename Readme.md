@@ -39,3 +39,7 @@ Cada cuerpo puede configurar semilla procedural, tinte, cobertura de nubes y vel
 El fondo usa un catálogo estelar determinista y persistente con variaciones de brillo y temperatura de color.
 
 El mundo separa objetos opacos y transparentes: los opacos se dibujan de adelante hacia atrás y los transparentes de atrás hacia adelante sin escribir profundidad.
+
+El gigante gaseoso utiliza una malla anular transparente, compartida y de doble cara, con bandas y desvanecimiento radial.
+
+Los planetas usan órbitas inclinadas compartidas por sus cuerpos, atmósferas y anillos para mantener cada grupo sincronizado.

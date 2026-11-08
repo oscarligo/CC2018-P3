@@ -3,7 +3,7 @@ use crate::load_objects::{Material, Mesh};
 use crate::render::Renderer;
 use crate::uniforms::Uniforms;
 use crate::vertex::Vertex;
-use crate::world::{RenderPass, WorldObject, WorldTransform};
+use crate::world::{Orbit, RenderPass, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::TAU;
 use std::sync::OnceLock;
@@ -28,6 +28,11 @@ impl PlanetRing {
             tilt_x,
             tilt_z,
         }
+    }
+
+    pub fn with_orbit(mut self, orbit: Orbit) -> Self {
+        self.transform.set_orbit(orbit);
+        self
     }
 
     fn model_matrix(&self) -> Matrix {

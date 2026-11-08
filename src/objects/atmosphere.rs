@@ -2,7 +2,7 @@ use super::celestial::{sphere_mesh, SphereLod};
 use crate::framebuffer::Framebuffer;
 use crate::render::Renderer;
 use crate::uniforms::Uniforms;
-use crate::world::{RenderPass, WorldObject, WorldTransform};
+use crate::world::{Orbit, RenderPass, WorldObject, WorldTransform};
 use raylib::prelude::{Matrix, Vector3};
 
 pub struct Atmosphere {
@@ -34,6 +34,11 @@ impl Atmosphere {
             colors: vec![color; vertex_count],
             alphas: vec![0.0; vertex_count],
         }
+    }
+
+    pub fn with_orbit(mut self, orbit: Orbit) -> Self {
+        self.transform.set_orbit(orbit);
+        self
     }
 
     fn model_matrix(&self) -> Matrix {
