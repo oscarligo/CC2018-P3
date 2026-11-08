@@ -55,3 +55,5 @@ El mundo separa objetos opacos y transparentes: los opacos se dibujan de adelant
 El gigante gaseoso utiliza una malla anular transparente, compartida y de doble cara, con bandas y desvanecimiento radial.
 
 Los planetas usan órbitas inclinadas. Sus atmósferas, anillos y futuros elementos se conectan mediante anclas padre-hijo; posición, rotación y escala locales se componen en jerarquía, por lo que siguen al cuerpo sin duplicar parámetros orbitales.
+
+Los cuerpos sólidos tienen identificadores estables y colisionadores esféricos. El mundo ofrece raycast al impacto más cercano y consultas de proximidad sin asignaciones obligatorias por frame. Atmósferas y anillos permanecen fuera de las colisiones.

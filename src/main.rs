@@ -2,6 +2,7 @@ mod celestial_shaders;
 mod noise;
 pub mod objects;
 mod performance;
+mod physics;
 mod rendering;
 mod scene;
 mod ship;

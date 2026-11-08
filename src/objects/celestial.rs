@@ -1,4 +1,5 @@
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
+use crate::physics::Collider;
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::{Material, Mesh};
 use crate::rendering::projection::projected_sphere_radius;
@@ -299,6 +300,10 @@ impl WorldObject for CelestialBody {
 
     fn bounding_radius(&self) -> Option<f32> {
         Some(1.0)
+    }
+
+    fn collider(&self) -> Option<Collider> {
+        Some(Collider::Sphere { radius: 1.0 })
     }
 
     fn light_position(&self) -> Option<Vector3> {

@@ -1,3 +1,4 @@
+use crate::physics::{Collider, ObjectId, Ray, RayHit, raycast_sphere, spheres_overlap};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::projection::sphere_is_visible;
 use crate::rendering::render::Renderer;
@@ -299,15 +300,24 @@ pub trait WorldObject {
     fn light_position(&self) -> Option<Vector3> {
         None
     }
+    fn collider(&self) -> Option<Collider> {
+        None
+    }
     fn render_pass(&self) -> RenderPass {
         RenderPass::Opaque
     }
     fn draw(&mut self, renderer: &mut Renderer, framebuffer: &mut Framebuffer, uniforms: &Uniforms);
 }
 
+struct WorldEntry {
+    id: ObjectId,
+    object: Box<dyn WorldObject>,
+}
+
 #[derive(Default)]
 pub struct World {
-    objects: Vec<Box<dyn WorldObject>>,
+    objects: Vec<WorldEntry>,
+    next_object_id: u64,
 }
 
 impl World {
@@ -315,24 +325,54 @@ impl World {
         Self::default()
     }
 
-    pub fn add<T: WorldObject + 'static>(&mut self, object: T) {
-        self.objects.push(Box::new(object));
+    pub fn add<T: WorldObject + 'static>(&mut self, object: T) -> ObjectId {
+        let id = ObjectId::new(self.next_object_id);
+        self.next_object_id += 1;
+        self.objects.push(WorldEntry {
+            id,
+            object: Box::new(object),
+        });
+        id
     }
 
     pub(crate) fn primary_light_position(&self) -> Option<Vector3> {
         self.objects
             .iter()
-            .find_map(|object| object.light_position())
+            .find_map(|entry| entry.object.light_position())
     }
 
     pub fn update(&mut self, update: &WorldUpdate) {
-        for object in &mut self.objects {
-            object.transform_mut().advance(update);
-            object.update(update);
+        for entry in &mut self.objects {
+            entry.object.transform_mut().advance(update);
+            entry.object.update(update);
         }
-        for object in &mut self.objects {
-            object.transform_mut().resolve_world_transform();
+        for entry in &mut self.objects {
+            entry.object.transform_mut().resolve_world_transform();
         }
+    }
+
+    pub fn raycast(&self, ray: Ray, max_distance: f32) -> Option<RayHit> {
+        // shortcut: queries scan all colliders; add a spatial index when worlds contain hundreds of them.
+        self.objects
+            .iter()
+            .filter_map(|entry| {
+                let (center, radius) = collider_sphere(entry.object.as_ref())?;
+                let distance = raycast_sphere(ray, center, radius, max_distance)?;
+                Some(RayHit {
+                    object_id: entry.id,
+                    distance,
+                    position: ray.origin + ray.direction * distance,
+                })
+            })
+            .min_by(|a, b| a.distance.total_cmp(&b.distance))
+    }
+
+    pub fn query_sphere(&self, center: Vector3, radius: f32, results: &mut Vec<ObjectId>) {
+        results.clear();
+        results.extend(self.objects.iter().filter_map(|entry| {
+            let (object_center, object_radius) = collider_sphere(entry.object.as_ref())?;
+            spheres_overlap(center, radius, object_center, object_radius).then_some(entry.id)
+        }));
     }
 
     pub fn draw(
@@ -367,21 +407,22 @@ impl World {
 
     fn sort_front_to_back(&mut self, camera_position: Vector3) {
         self.objects.sort_by(|a, b| {
-            distance_to_surface(a.as_ref(), camera_position)
-                .total_cmp(&distance_to_surface(b.as_ref(), camera_position))
+            distance_to_surface(a.object.as_ref(), camera_position)
+                .total_cmp(&distance_to_surface(b.object.as_ref(), camera_position))
         });
     }
 }
 
 fn draw_pass(
-    objects: &mut [Box<dyn WorldObject>],
+    objects: &mut [WorldEntry],
     pass: RenderPass,
     reverse: bool,
     renderer: &mut Renderer,
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
 ) {
-    let mut draw_object = |object: &mut Box<dyn WorldObject>| {
+    let mut draw_object = |entry: &mut WorldEntry| {
+        let object = &mut entry.object;
         if object.render_pass() != pass {
             return;
         }
@@ -416,6 +457,18 @@ fn draw_pass(
             draw_object(object);
         }
     }
+}
+
+fn collider_sphere(object: &dyn WorldObject) -> Option<(Vector3, f32)> {
+    let Collider::Sphere { radius } = object.collider()?;
+    let transform = object.transform();
+    let scale = transform
+        .scale
+        .x
+        .abs()
+        .max(transform.scale.y.abs())
+        .max(transform.scale.z.abs());
+    Some((transform.position, radius.abs() * scale))
 }
 
 fn distance_to_surface(object: &dyn WorldObject, camera_position: Vector3) -> f32 {
@@ -459,6 +512,10 @@ mod tests {
             self.radius
         }
 
+        fn collider(&self) -> Option<Collider> {
+            self.radius.map(|radius| Collider::Sphere { radius })
+        }
+
         fn draw(
             &mut self,
             _renderer: &mut Renderer,
@@ -486,7 +543,7 @@ mod tests {
         let positions: Vec<_> = world
             .objects
             .iter()
-            .map(|object| object.transform().position.z)
+            .map(|entry| entry.object.transform().position.z)
             .collect();
         assert_eq!(positions, [10.0, 20.0, 30.0]);
     }
@@ -511,7 +568,7 @@ mod tests {
 
         world.sort_front_to_back(Vector3::zero());
 
-        assert_eq!(world.objects[0].transform().position.z, 10.0);
+        assert_eq!(world.objects[0].object.transform().position.z, 10.0);
     }
 
     struct TransparentTestObject {
@@ -638,5 +695,35 @@ mod tests {
         let child_forward =
             transform_direction(&child.rotation.to_matrix(), Vector3::new(0.0, 0.0, 1.0));
         assert!((child_forward - Vector3::new(1.0, 0.0, 0.0)).length() < 0.0001);
+    }
+
+    #[test]
+    fn spatial_queries_return_stable_object_ids_after_sorting() {
+        let mut world = World::new();
+        let near = world.add(TestObject {
+            transform: WorldTransform::new(
+                Vector3::new(0.0, 0.0, 10.0),
+                Vector3::new(1.0, 1.0, 1.0),
+            ),
+            radius: Some(2.0),
+        });
+        let far = world.add(TestObject {
+            transform: WorldTransform::new(
+                Vector3::new(0.0, 0.0, 20.0),
+                Vector3::new(1.0, 1.0, 1.0),
+            ),
+            radius: Some(2.0),
+        });
+        world.sort_front_to_back(Vector3::new(0.0, 0.0, 30.0));
+
+        let ray = Ray::new(Vector3::zero(), Vector3::new(0.0, 0.0, 1.0)).unwrap();
+        let hit = world.raycast(ray, 100.0).unwrap();
+        assert_eq!(hit.object_id, near);
+        assert_eq!(hit.distance, 8.0);
+        assert_eq!(hit.position, Vector3::new(0.0, 0.0, 8.0));
+
+        let mut nearby = vec![near];
+        world.query_sphere(Vector3::new(0.0, 0.0, 20.0), 1.0, &mut nearby);
+        assert_eq!(nearby, [far]);
     }
 }
