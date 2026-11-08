@@ -35,3 +35,5 @@ Los cambios de LOD usan umbrales distintos de entrada y salida para evitar oscil
 Los planetas reciben iluminación desde la posición real de la estrella primaria registrada en el mundo.
 
 Cada cuerpo puede configurar semilla procedural, tinte, cobertura de nubes y velocidades de animación y rotación mediante `CelestialStyle`.
+
+El fondo usa un catálogo estelar determinista y persistente con variaciones de brillo y temperatura de color.

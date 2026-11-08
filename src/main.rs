@@ -16,6 +16,7 @@ pub mod solar_system;
 mod shaders;
 mod ship_effects;
 mod ship_movement;
+mod starfield;
 mod triangle;
 mod uniforms;
 mod vertex;
@@ -30,6 +31,7 @@ use render::Renderer;
 use rocket_audio::RocketAudio;
 use ship_movement::ShipMovement;
 use solar_system::build_solar_system;
+use starfield::Starfield;
 use std::thread;
 use std::time::{Duration, Instant};
 use uniforms::Uniforms;
@@ -65,6 +67,7 @@ fn main() {
     let mesh = load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut renderer = Renderer::default();
     let mut performance = PerformanceMonitor::default();
+    let starfield = Starfield::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
 
     let mut uniforms = Uniforms {
@@ -97,6 +100,7 @@ fn main() {
         );
         let update_time = update_start.elapsed();
 
+        starfield.draw(&mut framebuffer, &uniforms);
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
@@ -120,6 +124,7 @@ fn run_benchmark(object_count: usize) {
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
     let mut renderer = Renderer::default();
     let mut performance = PerformanceMonitor::default();
+    let starfield = Starfield::new();
     let mut world = build_benchmark_world(object_count);
     let uniforms = Uniforms {
         model_matrix: Matrix::identity(),
@@ -139,6 +144,7 @@ fn run_benchmark(object_count: usize) {
             frame_time: BENCHMARK_FRAME_TIME,
         });
         let update_time = update_start.elapsed();
+        starfield.draw(&mut framebuffer, &uniforms);
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         let mut metrics = renderer.metrics();
