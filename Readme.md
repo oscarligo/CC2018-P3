@@ -16,4 +16,4 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 cargo run --release
 ```
 
-Cada 120 frames se imprime en la terminal un reporte con tiempo promedio y p95 del frame, tiempos por etapa, objetos visibles y descartados, triángulos totales y descartados, y fragmentos cubiertos, rechazados por profundidad y sombreados. Estas métricas excluyen la pausa artificial de 16 ms entre frames.
+Cada 120 frames se imprime en la terminal un reporte con tiempo promedio y p95 del frame, tiempos por etapa, objetos visibles y descartados, superficies actualizadas, triángulos totales y descartados, y fragmentos cubiertos, rechazados por profundidad y sombreados. Estas métricas excluyen la pausa artificial de 16 ms entre frames.

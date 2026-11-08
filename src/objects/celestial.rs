@@ -9,6 +9,7 @@ use crate::world::{WorldObject, WorldTransform, WorldUpdate};
 use raylib::prelude::{Matrix, Vector3};
 use std::f32::consts::{PI, TAU};
 use std::sync::OnceLock;
+use std::time::Instant;
 
 const BODY_SCALE: f32 = 165.0;
 const ROTATION_SPEED: f32 = 0.08;
@@ -20,6 +21,8 @@ const LOW_LATITUDE_SEGMENTS: usize = 8;
 const LOW_LONGITUDE_SEGMENTS: usize = 12;
 const HIGH_LOD_RADIUS: f32 = 150.0;
 const MEDIUM_LOD_RADIUS: f32 = 40.0;
+const MEDIUM_UPDATE_INTERVAL: f32 = 1.0 / 30.0;
+const LOW_UPDATE_INTERVAL: f32 = 1.0 / 10.0;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum SphereLod {
@@ -35,6 +38,8 @@ pub struct CelestialBody {
     kind: CelestialKind,
     rotation: f32,
     time: f32,
+    surface_elapsed: f32,
+    surface_dirty: bool,
 }
 
 impl CelestialBody {
@@ -51,6 +56,8 @@ impl CelestialBody {
             kind,
             rotation: 0.0,
             time: 0.0,
+            surface_elapsed: 0.0,
+            surface_dirty: false,
         };
         body.update_surface();
         body
@@ -96,7 +103,25 @@ impl CelestialBody {
         self.lod = lod;
         self.colors
             .resize(sphere_mesh(lod).vertices.len(), Vector3::zero());
+        self.surface_dirty = true;
+    }
+
+    fn surface_update_interval(&self) -> f32 {
+        match self.lod {
+            SphereLod::High => 0.0,
+            SphereLod::Medium => MEDIUM_UPDATE_INTERVAL,
+            SphereLod::Low => LOW_UPDATE_INTERVAL,
+        }
+    }
+
+    fn update_surface_if_needed(&mut self) -> bool {
+        if !self.surface_dirty && self.surface_elapsed < self.surface_update_interval() {
+            return false;
+        }
         self.update_surface();
+        self.surface_elapsed = 0.0;
+        self.surface_dirty = false;
+        true
     }
 }
 
@@ -112,7 +137,7 @@ impl WorldObject for CelestialBody {
     fn update(&mut self, update: &WorldUpdate) {
         self.time += update.frame_time;
         self.rotation = (self.rotation + ROTATION_SPEED * update.frame_time) % TAU;
-        self.update_surface();
+        self.surface_elapsed += update.frame_time;
     }
 
     fn bounding_radius(&self) -> Option<f32> {
@@ -135,6 +160,10 @@ impl WorldObject for CelestialBody {
         let radius =
             projected_sphere_radius(self.transform.position, scale, uniforms, framebuffer.height);
         self.select_lod(radius);
+        let surface_start = Instant::now();
+        if self.update_surface_if_needed() {
+            renderer.record_surface_update(surface_start.elapsed());
+        }
         let body_uniforms = Uniforms {
             model_matrix: self.model_matrix(),
             camera_pos: uniforms.camera_pos,
@@ -251,5 +280,14 @@ mod tests {
             body.colors.len(),
             sphere_mesh(SphereLod::High).vertices.len()
         );
+    }
+
+    #[test]
+    fn low_lod_updates_at_a_reduced_rate() {
+        let mut body = CelestialBody::new(CelestialKind::GasGiant, Vector3::zero());
+        body.surface_elapsed = LOW_UPDATE_INTERVAL * 0.5;
+        assert!(!body.update_surface_if_needed());
+        body.surface_elapsed = LOW_UPDATE_INTERVAL;
+        assert!(body.update_surface_if_needed());
     }
 }

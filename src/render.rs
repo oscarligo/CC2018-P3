@@ -30,6 +30,11 @@ impl Renderer {
         }
     }
 
+    pub fn record_surface_update(&mut self, elapsed: std::time::Duration) {
+        self.metrics.surface_updates += 1;
+        self.metrics.surface_update += elapsed;
+    }
+
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
         self.render_internal(framebuffer, uniforms, mesh, None);
     }
