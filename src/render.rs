@@ -1,7 +1,7 @@
 use crate::framebuffer::Framebuffer;
 use crate::load_objects::Mesh;
 use crate::performance::FrameMetrics;
-use crate::projection::project_vertex;
+use crate::projection::{camera_depth, project_vertex};
 use crate::rasterizer::rasterize_indexed;
 use crate::shaders::{fragment_shader, vertex_shader};
 use crate::uniforms::Uniforms;
@@ -69,6 +69,8 @@ impl Renderer {
                 if let Some(colors) = colors {
                     transformed.color = colors[index];
                 }
+                transformed.camera_depth = camera_depth(transformed.transformed_position, uniforms)
+                    .unwrap_or(f32::INFINITY);
                 if let Some((screen_position, depth)) = project_vertex(
                     transformed.transformed_position,
                     uniforms.camera_pos,
@@ -95,6 +97,7 @@ impl Renderer {
             &mesh.indices,
             framebuffer.width,
             framebuffer.height,
+            uniforms,
             |fragment| {
                 let x = fragment.position.x as i32;
                 let y = fragment.position.y as i32;
@@ -112,6 +115,8 @@ impl Renderer {
         self.metrics.rasterization += stage_start.elapsed();
         self.metrics.triangles += mesh.indices.len() / 3;
         self.metrics.culled_triangles += stats.culled_triangles;
+        self.metrics.near_clipped_triangles += stats.near_clipped_triangles;
+        self.metrics.near_rejected_triangles += stats.near_rejected_triangles;
         self.metrics.covered_fragments += stats.covered_fragments;
         self.metrics.depth_rejected += depth_rejected;
         self.metrics.shaded_fragments += shaded_fragments;

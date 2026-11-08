@@ -2,7 +2,7 @@ use raylib::prelude::{Vector2, Vector3};
 
 use crate::uniforms::Uniforms;
 
-const NEAR_CLIP_DISTANCE: f32 = 1.0;
+pub(crate) const NEAR_CLIP_DISTANCE: f32 = 1.0;
 const VERTICAL_FOV: f32 = 60.0_f32.to_radians();
 
 pub fn project_vertex(
@@ -21,7 +21,7 @@ pub fn project_vertex(
     let camera_y = dot(relative, up);
     let depth = dot(relative, forward);
 
-    if depth <= NEAR_CLIP_DISTANCE {
+    if depth < NEAR_CLIP_DISTANCE {
         return None;
     }
 
@@ -30,6 +30,11 @@ pub fn project_vertex(
     let y = -camera_y / depth * focal_length + height * 0.5;
 
     Some((Vector2::new(x, y), depth))
+}
+
+pub fn camera_depth(vertex: Vector3, uniforms: &Uniforms) -> Option<f32> {
+    let forward = normalize(uniforms.camera_target - uniforms.camera_pos)?;
+    Some(dot(vertex - uniforms.camera_pos, forward))
 }
 
 pub fn sphere_is_visible(
