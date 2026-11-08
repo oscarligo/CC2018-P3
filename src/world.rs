@@ -68,6 +68,7 @@ impl World {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
     ) {
+        self.sort_front_to_back(uniforms.camera_pos);
         for object in &mut self.objects {
             let culled = object.bounding_radius().is_some_and(|local_radius| {
                 let transform = object.transform();
@@ -91,5 +92,66 @@ impl World {
             }
             object.draw(renderer, framebuffer, uniforms);
         }
+    }
+
+    fn sort_front_to_back(&mut self, camera_position: Vector3) {
+        self.objects.sort_by(|a, b| {
+            distance_squared(a.transform().position, camera_position)
+                .total_cmp(&distance_squared(b.transform().position, camera_position))
+        });
+    }
+}
+
+fn distance_squared(a: Vector3, b: Vector3) -> f32 {
+    let delta = a - b;
+    delta.x * delta.x + delta.y * delta.y + delta.z * delta.z
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct TestObject {
+        transform: WorldTransform,
+    }
+
+    impl WorldObject for TestObject {
+        fn transform(&self) -> &WorldTransform {
+            &self.transform
+        }
+
+        fn transform_mut(&mut self) -> &mut WorldTransform {
+            &mut self.transform
+        }
+
+        fn draw(
+            &mut self,
+            _renderer: &mut Renderer,
+            _framebuffer: &mut Framebuffer,
+            _uniforms: &Uniforms,
+        ) {
+        }
+    }
+
+    #[test]
+    fn objects_are_sorted_nearest_first() {
+        let mut world = World::new();
+        for z in [30.0, 10.0, 20.0] {
+            world.add(TestObject {
+                transform: WorldTransform::new(
+                    Vector3::new(0.0, 0.0, z),
+                    Vector3::new(1.0, 1.0, 1.0),
+                ),
+            });
+        }
+
+        world.sort_front_to_back(Vector3::zero());
+
+        let positions: Vec<_> = world
+            .objects
+            .iter()
+            .map(|object| object.transform().position.z)
+            .collect();
+        assert_eq!(positions, [10.0, 20.0, 30.0]);
     }
 }
