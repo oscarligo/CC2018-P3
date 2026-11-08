@@ -71,6 +71,7 @@ fn main() {
         let update_start = Instant::now();
         movement.update(&input, frame_time, &mut uniforms);
         world.update(&WorldUpdate { frame_time });
+        uniforms.light_position = world.primary_light_position();
         rocket_audio.update(
             input.thrust,
             input.braking,
@@ -85,7 +86,7 @@ fn main() {
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
         // Render the 3D object to the framebuffer
-        renderer.render(&mut framebuffer, &uniforms, &mesh);
+        renderer.render_lit(&mut framebuffer, &uniforms, &mesh);
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 

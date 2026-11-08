@@ -3,10 +3,17 @@ use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::Mesh;
 use crate::rendering::projection::{camera_depth, project_vertex};
 use crate::rendering::rasterizer::rasterize_indexed;
-use crate::rendering::shaders::{fragment_shader, vertex_shader};
+use crate::rendering::shaders::{fragment_shader, lit_vertex_shader, vertex_shader};
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
 use std::time::Instant;
+
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum RenderMode {
+    Opaque,
+    Lit,
+    Transparent,
+}
 
 #[derive(Default)]
 pub struct Renderer {
@@ -40,7 +47,11 @@ impl Renderer {
     }
 
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
-        self.render_internal(framebuffer, uniforms, mesh, None, None, false);
+        self.render_internal(framebuffer, uniforms, mesh, None, None, RenderMode::Opaque);
+    }
+
+    pub fn render_lit(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
+        self.render_internal(framebuffer, uniforms, mesh, None, None, RenderMode::Lit);
     }
 
     pub fn render_colored(
@@ -51,7 +62,14 @@ impl Renderer {
         colors: &[raylib::prelude::Vector3],
     ) {
         assert_eq!(colors.len(), mesh.vertices.len());
-        self.render_internal(framebuffer, uniforms, mesh, Some(colors), None, false);
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            Some(colors),
+            None,
+            RenderMode::Opaque,
+        );
     }
 
     pub fn render_transparent(
@@ -60,7 +78,14 @@ impl Renderer {
         uniforms: &Uniforms,
         mesh: &Mesh,
     ) {
-        self.render_internal(framebuffer, uniforms, mesh, None, None, true);
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            None,
+            None,
+            RenderMode::Transparent,
+        );
     }
 
     pub fn render_colored_transparent(
@@ -79,7 +104,7 @@ impl Renderer {
             mesh,
             Some(colors),
             Some(alphas),
-            true,
+            RenderMode::Transparent,
         );
     }
 
@@ -90,8 +115,9 @@ impl Renderer {
         mesh: &Mesh,
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
-        transparent: bool,
+        mode: RenderMode,
     ) {
+        let transparent = mode == RenderMode::Transparent;
         let width = framebuffer.width as f32;
         let height = framebuffer.height as f32;
 
@@ -100,7 +126,11 @@ impl Renderer {
         self.transformed_vertices.clear();
         self.transformed_vertices
             .extend(mesh.vertices.iter().enumerate().map(|(index, vertex)| {
-                let mut transformed = vertex_shader(vertex, uniforms);
+                let mut transformed = if mode == RenderMode::Lit {
+                    lit_vertex_shader(vertex, uniforms)
+                } else {
+                    vertex_shader(vertex, uniforms)
+                };
                 if let Some(colors) = colors {
                     transformed.color = colors[index];
                 }
