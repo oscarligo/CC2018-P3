@@ -1,4 +1,6 @@
 use self::catalog::{BodyDefinition, MotionDefinition};
+use self::celestial::BodyRole;
+use crate::celestial_shaders::CelestialKind;
 use crate::scene::world::{LocalOrbit, Orbit, TransformAnchor, World};
 use raylib::prelude::Vector3;
 
@@ -21,12 +23,22 @@ fn register_body(
     definition: BodyDefinition,
     anchors: &mut Vec<TransformAnchor>,
 ) {
+    let role = if matches!(&definition.motion, MotionDefinition::ParentOrbit { .. }) {
+        BodyRole::Moon
+    } else if matches!(definition.kind, CelestialKind::Star) {
+        BodyRole::Star
+    } else if definition.shape == celestial::BodyShape::Asteroid {
+        BodyRole::Asteroid
+    } else {
+        BodyRole::Planet
+    };
     let mut body = if definition.primary_light {
         celestial::CelestialBody::new_primary_star_styled(definition.position, definition.style)
     } else {
         celestial::CelestialBody::styled(definition.kind, definition.position, definition.style)
     }
     .with_shape(definition.shape)
+    .with_role(role)
     .with_scale(definition.scale);
     body = match definition.motion {
         MotionDefinition::Static => body,
@@ -101,11 +113,13 @@ mod tests {
 
     #[test]
     fn registered_system_exposes_the_sun_as_primary_light() {
+        let expected = catalog::solar_system_definitions()
+            .into_iter()
+            .find(|definition| definition.primary_light)
+            .unwrap()
+            .position;
         let mut world = World::new();
         register_all(&mut world);
-        assert_eq!(
-            world.primary_light_position(),
-            Some(Vector3::new(0.0, 0.0, 500.0))
-        );
+        assert_eq!(world.primary_light_position(), Some(expected));
     }
 }

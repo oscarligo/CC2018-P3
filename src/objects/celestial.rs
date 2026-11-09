@@ -46,6 +46,14 @@ pub enum BodyShape {
     Asteroid,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum BodyRole {
+    Star,
+    Planet,
+    Moon,
+    Asteroid,
+}
+
 struct LodTransition {
     target: SphereLod,
     elapsed: f32,
@@ -120,6 +128,7 @@ pub struct CelestialBody {
     lod_transition: Option<LodTransition>,
     pub(crate) transform: WorldTransform,
     kind: CelestialKind,
+    role: BodyRole,
     shape: BodyShape,
     rotation: f32,
     time: f32,
@@ -159,9 +168,17 @@ impl CelestialBody {
 
     pub fn with_shape(mut self, shape: BodyShape) -> Self {
         self.shape = shape;
+        if shape == BodyShape::Asteroid && self.role == BodyRole::Planet {
+            self.role = BodyRole::Asteroid;
+        }
         self.colors
             .resize(body_mesh(self.lod, shape).vertices.len(), Vector3::zero());
         self.update_surface();
+        self
+    }
+
+    pub fn with_role(mut self, role: BodyRole) -> Self {
+        self.role = role;
         self
     }
 
@@ -189,6 +206,11 @@ impl CelestialBody {
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
             ),
             kind,
+            role: if primary_light {
+                BodyRole::Star
+            } else {
+                BodyRole::Planet
+            },
             shape,
             rotation: 0.0,
             time: 0.0,
@@ -361,24 +383,26 @@ impl WorldObject for CelestialBody {
     }
 
     fn interaction(&self) -> Option<Interaction> {
-        Some(match self.kind {
-            CelestialKind::Star => Interaction {
+        Some(match self.role {
+            BodyRole::Star => Interaction {
                 prompt: "[F] Examinar estrella",
                 response: "La estrella emite la luz principal del sistema.",
             },
-            CelestialKind::Rocky => match self.shape {
-                BodyShape::Asteroid => Interaction {
-                    prompt: "[F] Examinar asteroide",
-                    response: "Un cuerpo pequeno, alargado y cubierto de roca irregular.",
-                },
-                BodyShape::Sphere | BodyShape::Rocky | BodyShape::Oblate => Interaction {
-                    prompt: "[F] Examinar planeta rocoso",
-                    response: "Un mundo rocoso con superficie procedural y atmosfera.",
-                },
-            },
-            CelestialKind::GasGiant => Interaction {
+            BodyRole::Planet if matches!(self.kind, CelestialKind::GasGiant) => Interaction {
                 prompt: "[F] Examinar gigante gaseoso",
                 response: "Un gigante gaseoso rodeado por un sistema de anillos.",
+            },
+            BodyRole::Planet => Interaction {
+                prompt: "[F] Examinar planeta rocoso",
+                response: "Un mundo rocoso con superficie procedural y atmosfera.",
+            },
+            BodyRole::Moon => Interaction {
+                prompt: "[F] Examinar luna",
+                response: "Una luna mineral que mantiene una orbita local alrededor de su planeta.",
+            },
+            BodyRole::Asteroid => Interaction {
+                prompt: "[F] Examinar asteroide",
+                response: "Un cuerpo pequeno, alargado y cubierto de roca irregular.",
             },
         })
     }
@@ -917,5 +941,14 @@ mod tests {
         let secondary = CelestialBody::new(CelestialKind::Star, position);
         assert_eq!(primary.light_position(), Some(position));
         assert_eq!(secondary.light_position(), None);
+    }
+
+    #[test]
+    fn moon_role_has_its_own_interaction() {
+        let moon = CelestialBody::new(CelestialKind::Rocky, Vector3::zero())
+            .with_shape(BodyShape::Asteroid)
+            .with_role(BodyRole::Moon);
+
+        assert_eq!(moon.interaction().unwrap().prompt, "[F] Examinar luna");
     }
 }
