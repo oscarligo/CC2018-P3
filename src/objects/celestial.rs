@@ -126,6 +126,8 @@ pub struct CelestialBody {
     colors: Vec<Vector3>,
     lod: SphereLod,
     lod_transition: Option<LodTransition>,
+    custom_mesh: Option<Mesh>,
+    custom_base_colors: Option<Vec<Vector3>>,
     pub(crate) transform: WorldTransform,
     kind: CelestialKind,
     role: BodyRole,
@@ -182,6 +184,28 @@ impl CelestialBody {
         self
     }
 
+    pub fn with_obj_model(mut self, path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let mut mesh = crate::rendering::load_objects::load_obj(path)?;
+        normalize_mesh(&mut mesh)?;
+        self.lod_transition = None;
+        self.colors.resize(mesh.vertices.len(), Vector3::zero());
+        self.custom_base_colors = matches!(self.kind, CelestialKind::Rocky).then(|| {
+            mesh.vertices
+                .iter()
+                .map(|vertex| {
+                    crate::celestial_shaders::base_color(
+                        CelestialKind::Rocky,
+                        vertex.position.normalize(),
+                    )
+                    .expect("rocky bodies provide a base color")
+                })
+                .collect()
+        });
+        self.custom_mesh = Some(mesh);
+        self.update_surface();
+        Ok(self)
+    }
+
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.transform
             .set_local_scale(Vector3::new(scale, scale, scale));
@@ -201,6 +225,8 @@ impl CelestialBody {
             colors: vec![Vector3::zero(); mesh.vertices.len()],
             lod,
             lod_transition: None,
+            custom_mesh: None,
+            custom_base_colors: None,
             transform: WorldTransform::new(
                 position,
                 Vector3::new(BODY_SCALE, BODY_SCALE, BODY_SCALE),
@@ -240,18 +266,20 @@ impl CelestialBody {
     fn update_surface(&mut self) {
         let rotation = self.transform.rotation.to_matrix();
         let base_colors = match self.kind {
+            CelestialKind::Rocky if self.custom_mesh.is_some() => {
+                self.custom_base_colors.as_deref()
+            }
             CelestialKind::Rocky if self.shape == BodyShape::Asteroid => {
                 Some(asteroid_base_colors(self.lod))
             }
             CelestialKind::Rocky => Some(rocky_base_colors(self.lod)),
             CelestialKind::Star | CelestialKind::GasGiant => None,
         };
-        for (index, (color, vertex)) in self
-            .colors
-            .iter_mut()
-            .zip(&body_mesh(self.lod, self.shape).vertices)
-            .enumerate()
-        {
+        let vertices = self.custom_mesh.as_ref().map_or_else(
+            || body_mesh(self.lod, self.shape).vertices.as_slice(),
+            |mesh| mesh.vertices.as_slice(),
+        );
+        for (index, (color, vertex)) in self.colors.iter_mut().zip(vertices).enumerate() {
             let point = vertex.position.normalize();
             let normal = vertex.normal;
             let world_normal = Vector3::new(
@@ -272,7 +300,8 @@ impl CelestialBody {
     }
 
     fn select_lod(&mut self, projected_radius: f32) -> bool {
-        if self.lod_transition.is_some() {
+        // shortcut: custom OBJ bodies use one mesh; add authored LOD paths when their cost is measured.
+        if self.custom_mesh.is_some() || self.lod_transition.is_some() {
             return false;
         }
         let lod = match self.lod {
@@ -442,12 +471,59 @@ impl WorldObject for CelestialBody {
             camera_up: uniforms.camera_up,
             light_position: uniforms.light_position,
         };
-        let mesh = self.lod_transition.as_ref().map_or_else(
-            || body_mesh(self.lod, self.shape),
-            |transition| &transition.mesh,
-        );
+        let mesh = if let Some(mesh) = &self.custom_mesh {
+            mesh
+        } else if let Some(transition) = &self.lod_transition {
+            &transition.mesh
+        } else {
+            body_mesh(self.lod, self.shape)
+        };
         renderer.render_colored(framebuffer, &body_uniforms, mesh, &self.colors);
     }
+}
+
+fn normalize_mesh(mesh: &mut Mesh) -> Result<(), Box<dyn std::error::Error>> {
+    let Some(first) = mesh.vertices.first() else {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "planet OBJ contains no vertices",
+        )
+        .into());
+    };
+    let (minimum, maximum) = mesh.vertices.iter().skip(1).fold(
+        (first.position, first.position),
+        |(minimum, maximum), vertex| {
+            (
+                Vector3::new(
+                    minimum.x.min(vertex.position.x),
+                    minimum.y.min(vertex.position.y),
+                    minimum.z.min(vertex.position.z),
+                ),
+                Vector3::new(
+                    maximum.x.max(vertex.position.x),
+                    maximum.y.max(vertex.position.y),
+                    maximum.z.max(vertex.position.z),
+                ),
+            )
+        },
+    );
+    let center = (minimum + maximum) * 0.5;
+    let radius = mesh
+        .vertices
+        .iter()
+        .map(|vertex| (vertex.position - center).length())
+        .fold(0.0, f32::max);
+    if radius <= f32::EPSILON {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "planet OBJ must have a non-zero size",
+        )
+        .into());
+    }
+    for vertex in &mut mesh.vertices {
+        vertex.position = (vertex.position - center) * (1.0 / radius);
+    }
+    Ok(())
 }
 
 fn lod_detail(lod: SphereLod) -> u8 {
@@ -950,5 +1026,22 @@ mod tests {
             .with_role(BodyRole::Moon);
 
         assert_eq!(moon.interaction().unwrap().prompt, "[F] Examinar luna");
+    }
+
+    #[test]
+    fn obj_planet_model_is_centered_normalized_and_skips_procedural_lod() {
+        let mut body = CelestialBody::new(CelestialKind::Rocky, Vector3::zero())
+            .with_obj_model("assets/object.obj")
+            .unwrap();
+        let mesh = body.custom_mesh.as_ref().unwrap();
+        let maximum_radius = mesh
+            .vertices
+            .iter()
+            .map(|vertex| vertex.position.length())
+            .fold(0.0, f32::max);
+
+        assert!((maximum_radius - 1.0).abs() < 0.0001);
+        assert_eq!(body.colors.len(), mesh.vertices.len());
+        assert!(!body.select_lod(HIGH_LOD_ENTER_RADIUS));
     }
 }

@@ -8,6 +8,7 @@ pub(super) const ORBIT_SPREAD: f32 = 1.0;
 
 pub(super) struct BodyDefinition {
     pub kind: CelestialKind,
+    pub model_path: Option<&'static str>,
     pub shape: BodyShape,
     pub position: Vector3,
     pub scale: f32,
@@ -120,11 +121,13 @@ fn field(seed: u32, count: usize) -> Option<RockFieldDefinition> {
 
 pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
     let sun_pos = Vector3::new(0.0, 0.0, 1500.0);
+    let sphere_path = Some("assets/sphere.obj");
 
     vec![
         // 0: Estrella Amarilla Principal
         BodyDefinition {
             kind: CelestialKind::Star,
+            model_path: sphere_path,
             shape: BodyShape::Sphere,
             position: sun_pos,
             scale: BODY_SCALE * 2.2,
@@ -145,6 +148,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 1: Protoplaneta (Arriba y a la derecha)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: sphere_path,
             shape: BodyShape::Rocky,
             position: orbit_pos(sun_pos, 700.0, 18.0, 600.0),
             scale: BODY_SCALE * 0.55,
@@ -169,6 +173,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 2: Magmático (Abajo, muy sumergido)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: sphere_path,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 900.0, 142.0, -1100.0),
             scale: BODY_SCALE * 0.78,
@@ -193,6 +198,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 3: Invernadero (Alto en Y)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 1200.0, 255.0, 1400.0),
             scale: BODY_SCALE * 0.92,
@@ -222,6 +228,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 4: Oceánico (Profundo en -Y)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: orbit_pos(sun_pos, 1800.0, 320.0, -1600.0),
             scale: BODY_SCALE,
@@ -246,6 +253,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 5: Luna de #4
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: Vector3::zero(),
             scale: 52.0,
@@ -271,6 +279,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 6: Desierto con Anillo (Zenit)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: orbit_pos(sun_pos, 2200.0, 78.0, 2400.0),
             scale: BODY_SCALE * 0.74,
@@ -300,6 +309,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 7 & 8: Lunas de #6
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: Vector3::zero(),
             scale: 34.0,
@@ -324,6 +334,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         },
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: Vector3::zero(),
             scale: 24.0,
@@ -349,6 +360,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 9: Planeta Enano (Nadir)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: orbit_pos(sun_pos, 2800.0, 198.0, -2900.0),
             scale: BODY_SCALE * 0.48,
@@ -373,6 +385,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 10: Supertierra (Elevado)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 3500.0, 348.0, 3200.0),
             scale: BODY_SCALE * 1.32,
@@ -402,6 +415,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 11: Luna de #10
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: Vector3::zero(),
             scale: 64.0,
@@ -427,6 +441,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 12: Mundo Amatista (Muy hundido)
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: orbit_pos(sun_pos, 4200.0, 112.0, -4500.0),
             scale: BODY_SCALE * 0.88,
@@ -451,6 +466,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 13: Planeta Árido
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 5000.0, 232.0, 5200.0),
             scale: BODY_SCALE * 0.84,
@@ -475,6 +491,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 14: Coloso Joviano (Hacia abajo)
         BodyDefinition {
             kind: CelestialKind::GasGiant,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 6000.0, 42.0, -5800.0),
             scale: BODY_SCALE * 1.85,
@@ -499,6 +516,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 15, 16, 17: Lunas del Coloso
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: Vector3::zero(),
             scale: 56.0,
@@ -523,6 +541,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         },
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: Vector3::zero(),
             scale: 52.0,
@@ -547,6 +566,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         },
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: Vector3::zero(),
             scale: 76.0,
@@ -572,6 +592,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 18: Gigante Anillado Imperial (Hacia arriba)
         BodyDefinition {
             kind: CelestialKind::GasGiant,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 7200.0, 168.0, 7000.0),
             scale: BODY_SCALE * 1.65,
@@ -596,6 +617,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 19, 20: Lunas de #18
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: Vector3::zero(),
             scale: 72.0,
@@ -620,6 +642,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         },
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: Vector3::zero(),
             scale: 44.0,
@@ -645,6 +668,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 21: Enana Marrón (Sur Profundo)
         BodyDefinition {
             kind: CelestialKind::Star,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 8500.0, 288.0, -8200.0),
             scale: BODY_SCALE * 1.38,
@@ -669,6 +693,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 22: Luna de #21
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: Vector3::zero(),
             scale: 48.0,
@@ -694,6 +719,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 23: Gigante Cian (Norte Profundo)
         BodyDefinition {
             kind: CelestialKind::GasGiant,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 9800.0, 6.0, 9500.0),
             scale: BODY_SCALE * 1.28,
@@ -718,6 +744,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 24: Luna de #23
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Asteroid,
             position: Vector3::zero(),
             scale: 44.0,
@@ -743,6 +770,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 25: Gigante Cobalto
         BodyDefinition {
             kind: CelestialKind::GasGiant,
+            model_path: None,
             shape: BodyShape::Oblate,
             position: orbit_pos(sun_pos, 11200.0, 126.0, -10500.0),
             scale: BODY_SCALE * 1.24,
@@ -767,6 +795,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 26: Luna Retrógrada de #25
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: Vector3::zero(),
             scale: 60.0,
@@ -792,6 +821,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 27: Helado Exterior
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 12600.0, 216.0, 11500.0),
             scale: BODY_SCALE * 0.58,
@@ -821,6 +851,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 28: Luna Binaria de #27
         BodyDefinition {
             kind: CelestialKind::Rocky,
+            model_path: None,
             shape: BodyShape::Rocky,
             position: Vector3::zero(),
             scale: 50.0,
@@ -846,6 +877,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
         // 29: Gigante Lejano
         BodyDefinition {
             kind: CelestialKind::GasGiant,
+            model_path: None,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 14000.0, 306.0, -12500.0),
             scale: BODY_SCALE * 1.12,

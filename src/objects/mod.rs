@@ -40,6 +40,11 @@ fn register_body(
     .with_shape(definition.shape)
     .with_role(role)
     .with_scale(definition.scale);
+    if let Some(path) = definition.model_path {
+        body = body
+            .with_obj_model(path)
+            .unwrap_or_else(|error| panic!("failed to load planet model {path}: {error}"));
+    }
     body = match definition.motion {
         MotionDefinition::Static => body,
         MotionDefinition::Orbit {
