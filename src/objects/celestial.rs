@@ -122,7 +122,11 @@ impl LodTransition {
     }
 }
 
+/// Posición local, normal mundial, tiempo y dirección al sol.
+type SurfaceShader = fn(Vector3, Vector3, f32, Vector3) -> Vector3;
+
 pub struct CelestialBody {
+    fragment_surface: Option<SurfaceShader>,
     colors: Vec<Vector3>,
     lod: SphereLod,
     lod_transition: Option<LodTransition>,
@@ -206,6 +210,11 @@ impl CelestialBody {
         Ok(self)
     }
 
+    pub fn with_fragment_shader(mut self, shader: SurfaceShader) -> Self {
+        self.fragment_surface = Some(shader);
+        self
+    }
+
     pub fn with_scale(mut self, scale: f32) -> Self {
         self.transform
             .set_local_scale(Vector3::new(scale, scale, scale));
@@ -222,6 +231,7 @@ impl CelestialBody {
         let shape = BodyShape::Sphere;
         let mesh = body_mesh(lod, shape);
         let mut body = Self {
+            fragment_surface: None,
             colors: vec![Vector3::zero(); mesh.vertices.len()],
             lod,
             lod_transition: None,
@@ -355,6 +365,9 @@ impl CelestialBody {
     }
 
     fn update_surface_if_needed(&mut self) -> bool {
+        if self.fragment_surface.is_some() {
+            return false;
+        }
         if !self.surface_dirty && self.surface_elapsed < self.surface_update_interval() {
             return false;
         }
@@ -478,7 +491,25 @@ impl WorldObject for CelestialBody {
         } else {
             body_mesh(self.lod, self.shape)
         };
-        renderer.render_colored(framebuffer, &body_uniforms, mesh, &self.colors);
+        if let Some(shader) = self.fragment_surface {
+            let rotation = self.transform.rotation.to_matrix();
+            renderer.render_surface(framebuffer, &body_uniforms, mesh, |surface| {
+                let normal = surface.normal.normalize();
+                let world_normal = Vector3::new(
+                    rotation.m0 * normal.x + rotation.m4 * normal.y + rotation.m8 * normal.z,
+                    rotation.m1 * normal.x + rotation.m5 * normal.y + rotation.m9 * normal.z,
+                    rotation.m2 * normal.x + rotation.m6 * normal.y + rotation.m10 * normal.z,
+                );
+                shader(
+                    surface.position.normalize(),
+                    world_normal,
+                    self.time,
+                    self.light_direction,
+                )
+            });
+        } else {
+            renderer.render_colored(framebuffer, &body_uniforms, mesh, &self.colors);
+        }
     }
 }
 

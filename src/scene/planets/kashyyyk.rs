@@ -1,3 +1,5 @@
+mod surface;
+
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::objects::celestial::CelestialBody;
 use crate::scene::world::{Orbit, World};
@@ -23,14 +25,11 @@ pub(super) fn registrar(world: &mut World) {
         CelestialKind::Rocky,
         position,
         CelestialStyle {
-            // Apariencia verde provisional. El shader forestal va en el bloque 2.
-            tint: Vector3::new(0.28, 1.65, 0.22),
-            cloud_threshold: 1.1,
-            animation_speed: 0.0,
             rotation_speed: ROTATION_SPEED,
             ..CelestialStyle::default()
         },
     )
+    .with_fragment_shader(surface::shade)
     .with_scale(RADIUS)
     .with_orbit(Orbit::new(
         sun_position,

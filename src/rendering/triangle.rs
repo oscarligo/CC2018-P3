@@ -1,4 +1,4 @@
-use crate::rendering::fragment::Fragment;
+use crate::rendering::fragment::{Fragment, SurfacePoint};
 use crate::rendering::vertex::Vertex;
 use raylib::prelude::Vector2;
 
@@ -23,6 +23,7 @@ fn fragment_at(
     vertices: [&Vertex; 3],
     weights: [f32; 3],
     interpolate_alpha: bool,
+    interpolate_surface: bool,
 ) -> Fragment {
     let inverse_depth = weights[0] / vertices[0].camera_depth
         + weights[1] / vertices[1].camera_depth
@@ -53,6 +54,14 @@ fn fragment_at(
     };
 
     Fragment {
+        surface: interpolate_surface.then(|| SurfacePoint {
+            position: vertices[0].position * corrected[0]
+                + vertices[1].position * corrected[1]
+                + vertices[2].position * corrected[2],
+            normal: vertices[0].normal * corrected[0]
+                + vertices[1].normal * corrected[1]
+                + vertices[2].normal * corrected[2],
+        }),
         position,
         color,
         alpha,
@@ -77,6 +86,7 @@ pub fn triangle_scanline(
     width: u32,
     height: u32,
     interpolate_alpha: bool,
+    interpolate_surface: bool,
     emit: &mut impl FnMut(Fragment),
 ) -> usize {
     let Some(points) = positions(a, b, c) else {
@@ -148,7 +158,13 @@ pub fn triangle_scanline(
             let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
             let weights = barycentric(center, points, area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
-                emit(fragment_at(center, [a, b, c], weights, interpolate_alpha));
+                emit(fragment_at(
+                    center,
+                    [a, b, c],
+                    weights,
+                    interpolate_alpha,
+                    interpolate_surface,
+                ));
                 fragment_count += 1;
             }
         }
@@ -160,6 +176,30 @@ pub fn triangle_scanline(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn surface_attributes_use_perspective_correct_weights() {
+        use raylib::prelude::Vector3;
+        let mut a = Vertex::new(Vector3::zero());
+        let mut b = Vertex::new(Vector3::new(4.0, 0.0, 0.0));
+        let mut c = Vertex::new(Vector3::new(0.0, 8.0, 0.0));
+        a.camera_depth = 1.0;
+        b.camera_depth = 2.0;
+        c.camera_depth = 4.0;
+        a.normal = Vector3::new(1.0, 0.0, 0.0);
+        b.normal = Vector3::new(0.0, 1.0, 0.0);
+        c.normal = Vector3::new(0.0, 0.0, 1.0);
+        let weights = [0.25, 0.25, 0.5];
+        let fragment = fragment_at(Vector2::zero(), [&a, &b, &c], weights, false, true);
+        let surface = fragment.surface.unwrap();
+        assert!((surface.position - Vector3::new(1.0, 2.0, 0.0)).length() < 0.0001);
+        assert!((surface.normal - Vector3::new(0.5, 0.25, 0.25)).length() < 0.0001);
+        assert!(
+            fragment_at(Vector2::zero(), [&a, &b, &c], weights, false, false)
+                .surface
+                .is_none()
+        );
+    }
 
     fn vertex(x: f32, y: f32) -> Vertex {
         let mut vertex = Vertex::new(Default::default());
@@ -187,7 +227,7 @@ mod tests {
         c.camera_depth = 1.0;
         let mut emitted = 0;
 
-        let count = triangle_scanline(&a, &c, &b, 3, 3, false, &mut |_| emitted += 1);
+        let count = triangle_scanline(&a, &c, &b, 3, 3, false, false, &mut |_| emitted += 1);
 
         assert_eq!(count, emitted);
         assert!(count > 0);

@@ -33,6 +33,7 @@ pub fn line(start: &Vertex, end: &Vertex, width: u32, height: u32) -> Vec<Fragme
 
     loop {
         fragments.push(Fragment {
+            surface: None,
             position: Vector2::new(x0 as f32, y0 as f32),
             color: start.color,
             alpha: start.alpha,

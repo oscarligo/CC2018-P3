@@ -1,4 +1,5 @@
 use crate::performance::FrameMetrics;
+use crate::rendering::fragment::{Fragment, SurfacePoint};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::Mesh;
 use crate::rendering::projection::{camera_depth, project_vertex};
@@ -6,6 +7,7 @@ use crate::rendering::rasterizer::rasterize_indexed;
 use crate::rendering::shaders::{fragment_shader, lit_vertex_shader, vertex_shader};
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
+use raylib::prelude::Vector3;
 use std::time::Instant;
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -47,11 +49,27 @@ impl Renderer {
     }
 
     pub fn render(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
-        self.render_internal(framebuffer, uniforms, mesh, None, None, RenderMode::Opaque);
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            None,
+            None,
+            RenderMode::Opaque,
+            None,
+        );
     }
 
     pub fn render_lit(&mut self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, mesh: &Mesh) {
-        self.render_internal(framebuffer, uniforms, mesh, None, None, RenderMode::Lit);
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            None,
+            None,
+            RenderMode::Lit,
+            None,
+        );
     }
 
     pub fn render_colored(
@@ -69,6 +87,7 @@ impl Renderer {
             Some(colors),
             None,
             RenderMode::Opaque,
+            None,
         );
     }
 
@@ -85,6 +104,7 @@ impl Renderer {
             None,
             None,
             RenderMode::Transparent,
+            None,
         );
     }
 
@@ -105,6 +125,28 @@ impl Renderer {
             Some(colors),
             Some(alphas),
             RenderMode::Transparent,
+            None,
+        );
+    }
+
+    /// Evalúa un shader CPU por fragmento visible, después del z-buffer.
+    pub fn render_surface(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        shader: impl Fn(SurfacePoint) -> Vector3,
+    ) {
+        let shade =
+            |fragment: &Fragment| shader(fragment.surface.expect("surface attributes requested"));
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            None,
+            None,
+            RenderMode::Opaque,
+            Some(&shade),
         );
     }
 
@@ -116,6 +158,7 @@ impl Renderer {
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
         mode: RenderMode,
+        surface_shader: Option<&dyn Fn(&Fragment) -> Vector3>,
     ) {
         let transparent = mode == RenderMode::Transparent;
         let width = framebuffer.width as f32;
@@ -167,6 +210,7 @@ impl Renderer {
             framebuffer.height,
             uniforms,
             transparent,
+            surface_shader.is_some(),
             |fragment| {
                 let x = fragment.position.x as i32;
                 let y = fragment.position.y as i32;
@@ -174,7 +218,11 @@ impl Renderer {
                     depth_rejected += 1;
                     return;
                 }
-                let Some(color) = fragment_shader(&fragment, &mesh.materials) else {
+                let color = surface_shader.map_or_else(
+                    || fragment_shader(&fragment, &mesh.materials),
+                    |shader| Some(shader(&fragment)),
+                );
+                let Some(color) = color else {
                     return;
                 };
                 shaded_fragments += 1;
@@ -190,5 +238,55 @@ impl Renderer {
         self.metrics.covered_fragments += stats.covered_fragments;
         self.metrics.depth_rejected += depth_rejected;
         self.metrics.shaded_fragments += shaded_fragments;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::rendering::load_objects::Material;
+    use raylib::prelude::{Color, Matrix};
+    use std::cell::Cell;
+
+    #[test]
+    fn surface_shader_runs_per_visible_fragment_and_respects_depth() {
+        let mesh = Mesh {
+            vertices: [
+                Vector3::new(-0.8, -0.8, 2.0),
+                Vector3::new(0.0, 0.8, 4.0),
+                Vector3::new(0.8, -0.8, 2.0),
+            ]
+            .into_iter()
+            .map(Vertex::new)
+            .collect(),
+            indices: vec![0, 1, 2],
+            materials: vec![Material {
+                diffuse_texture: None,
+            }],
+        };
+        let uniforms = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: Vector3::zero(),
+            camera_target: Vector3::new(0.0, 0.0, 1.0),
+            camera_up: Vector3::new(0.0, 1.0, 0.0),
+            light_position: None,
+        };
+        let mut renderer = Renderer::default();
+        let mut framebuffer = Framebuffer::new(32, 32, Color::BLACK);
+        let calls = Cell::new(0);
+        renderer.render_surface(&mut framebuffer, &uniforms, &mesh, |surface| {
+            calls.set(calls.get() + 1);
+            assert!(surface.position.z >= 2.0 && surface.position.z <= 4.0);
+            Vector3::new(0.0, 1.0, 0.0)
+        });
+        assert!(calls.get() > mesh.vertices.len());
+        assert_eq!(calls.get(), renderer.metrics().shaded_fragments);
+        calls.set(0);
+        renderer.render_surface(&mut framebuffer, &uniforms, &mesh, |_| {
+            calls.set(calls.get() + 1);
+            Vector3::zero()
+        });
+        assert_eq!(calls.get(), 0);
+        assert!(renderer.metrics().depth_rejected > 0);
     }
 }

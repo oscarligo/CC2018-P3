@@ -18,6 +18,7 @@ pub fn rasterize_indexed(
     height: u32,
     uniforms: &Uniforms,
     interpolate_alpha: bool,
+    interpolate_surface: bool,
     mut emit: impl FnMut(Fragment),
 ) -> RasterizationStats {
     let mut culled_triangles = 0;
@@ -67,8 +68,16 @@ pub fn rasterize_indexed(
                 culled_triangles += 1;
                 continue;
             }
-            covered_fragments +=
-                triangle_scanline(a, b, c, width, height, interpolate_alpha, &mut emit);
+            covered_fragments += triangle_scanline(
+                a,
+                b,
+                c,
+                width,
+                height,
+                interpolate_alpha,
+                interpolate_surface,
+                &mut emit,
+            );
         }
     }
 
