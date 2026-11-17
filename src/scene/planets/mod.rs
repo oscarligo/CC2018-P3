@@ -1,7 +1,8 @@
+mod kashyyyk;
+
 use crate::scene::world::World;
 
-/// Register all planets in the world.
-pub fn register_all(_world: &mut World) {
-    // Example:
-    // _world.add(earth::Earth::new());
+/// Registra los planetas independientes.
+pub fn register_all(world: &mut World) {
+    kashyyyk::registrar(world);
 }
