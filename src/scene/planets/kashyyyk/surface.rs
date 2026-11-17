@@ -14,6 +14,19 @@ fn elevation(point: Vector3) -> f32 {
     fbm(point * 3.3 + Vector3::new(2.4, -1.7, 0.8), 3)
 }
 
+fn vegetation_density(point: Vector3) -> f32 {
+    fbm(point * 8.5 + Vector3::new(-3.0, 0.5, 1.2), 2)
+}
+
+/// Mismo terreno que el shader: sin árboles en agua, costas ni roca alta.
+pub(super) fn forest_weight(point: Vector3) -> f32 {
+    let height = elevation(point);
+    if !(SEA_LEVEL + 0.055..0.62).contains(&height) {
+        return 0.0;
+    }
+    smoothstep(0.25, 0.72, vegetation_density(point))
+}
+
 fn cloud_cover(point: Vector3, time: f32) -> f32 {
     let flow = Vector3::new(time * CLOUD_SPEED, time * 0.004, -time * 0.011);
     smoothstep(0.59, 0.76, fbm(point * 5.2 + flow, 2)) * 0.72
@@ -27,7 +40,7 @@ pub(super) fn shade(
 ) -> Vector3 {
     let height = elevation(point);
     let detail = fbm(point * 23.0, 2);
-    let density = fbm(point * 8.5 + Vector3::new(-3.0, 0.5, 1.2), 2);
+    let density = vegetation_density(point);
     let forest = mix(
         Vector3::new(0.045, 0.16, 0.035),
         Vector3::new(0.20, 0.43, 0.075),

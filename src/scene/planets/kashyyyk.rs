@@ -1,3 +1,4 @@
+mod forest;
 mod surface;
 
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
@@ -38,5 +39,7 @@ pub(super) fn registrar(world: &mut World) {
         ORBITAL_SPEED,
     ));
 
+    let anchor = planet.transform.anchor();
     world.add(planet);
+    forest::register(world, anchor, RADIUS);
 }
