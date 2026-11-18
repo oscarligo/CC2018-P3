@@ -1,3 +1,5 @@
+mod benchmark;
+mod detail;
 mod forest;
 mod surface;
 mod village;
@@ -18,7 +20,16 @@ const INITIAL_OFFSET: Vector3 = Vector3 {
     z: -300.0,
 };
 
+pub(super) fn benchmark(captures: bool) -> Result<(), Box<dyn std::error::Error>> {
+    benchmark::run(captures)
+}
+
 pub(super) fn registrar(world: &mut World) {
+    register_with_lod(world, true);
+}
+
+fn register_with_lod(world: &mut World, lod: bool) {
+    surface::prepare();
     let sun_position = world
         .primary_light_position()
         .expect("Kashyyyk requiere registrar primero el sol del sistema");
@@ -42,6 +53,6 @@ pub(super) fn registrar(world: &mut World) {
 
     let anchor = planet.transform.anchor();
     world.add(planet);
-    forest::register(world, anchor.clone(), RADIUS);
-    village::register(world, anchor, RADIUS);
+    forest::register(world, anchor.clone(), RADIUS, lod);
+    village::register(world, anchor, RADIUS, lod);
 }

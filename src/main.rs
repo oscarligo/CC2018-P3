@@ -28,6 +28,14 @@ const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--benchmark-kashyyyk") {
+        let captures = std::env::args().any(|arg| arg == "--capturas");
+        if let Err(error) = scene::planets::benchmark_kashyyyk(captures) {
+            eprintln!("No se pudo medir Kashyyyk: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
     match benchmark_object_count(std::env::args()) {
         Ok(Some(object_count)) => {
             run_benchmark(object_count);

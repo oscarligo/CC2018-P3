@@ -14,6 +14,18 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
+    pub(crate) fn save_png(
+        &self,
+        path: impl AsRef<std::path::Path>,
+    ) -> Result<(), image::ImageError> {
+        image::save_buffer(
+            path,
+            &self.pixels,
+            self.width,
+            self.height,
+            image::ColorType::Rgba8,
+        )
+    }
     pub fn new(width: u32, height: u32, background_color: Color) -> Self {
         let mut framebuffer = Framebuffer {
             width,

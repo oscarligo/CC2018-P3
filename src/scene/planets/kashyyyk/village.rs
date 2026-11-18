@@ -1,6 +1,7 @@
-use super::{forest, surface};
+use super::{detail, forest, surface};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::{Mesh, load_obj};
+use crate::rendering::projection::projected_sphere_radius;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::scene::world::{TransformAnchor, World, WorldObject, WorldTransform};
@@ -63,12 +64,16 @@ pub(super) fn is_reserved(direction: Vector3) -> bool {
     (direction - site_direction()).length() < CLEARANCE
 }
 
-pub(super) fn register(world: &mut World, parent: TransformAnchor, radius: f32) {
-    world.add(Village::attached_to(parent, radius));
+pub(super) fn register(world: &mut World, parent: TransformAnchor, radius: f32, lod: bool) {
+    let mut village = Village::attached_to(parent, radius);
+    village.lod_enabled = lod;
+    world.add(village);
 }
 
 struct Village {
     transform: WorldTransform,
+    lod_enabled: bool,
+    full_detail: bool,
 }
 
 impl Village {
@@ -77,7 +82,11 @@ impl Village {
         let mut transform = WorldTransform::new(Vector3::zero(), Vector3::new(size, size, size));
         transform.set_parent(parent, site_direction() * 0.997);
         transform.set_local_rotation(site_rotation());
-        Self { transform }
+        Self {
+            transform,
+            lod_enabled: true,
+            full_detail: false,
+        }
     }
 }
 
@@ -196,6 +205,59 @@ fn mesh() -> &'static Mesh {
     })
 }
 
+fn low_mesh() -> &'static Mesh {
+    static MESH: OnceLock<Mesh> = OnceLock::new();
+    MESH.get_or_init(|| {
+        let mut builder = detail::Builder::new();
+        let wood = Vector3::new(0.40, 0.24, 0.12);
+        builder.block(
+            Vector3::new(0.0, 3.3, 0.0),
+            Vector3::new(6.8, 0.3, 6.8),
+            wood,
+        );
+        builder.block(
+            Vector3::new(SECOND_TREE_X, 3.3, 0.0),
+            Vector3::new(5.8, 0.3, 5.8),
+            wood,
+        );
+        builder.block(
+            Vector3::new(5.6, 3.4, 0.0),
+            Vector3::new(4.2, 0.2, 1.05),
+            wood,
+        );
+        for (x, z) in [
+            (0.0, -2.35),
+            (-2.25, 0.0),
+            (SECOND_TREE_X, -2.05),
+            (SECOND_TREE_X + 1.9, 0.0),
+        ] {
+            builder.block(Vector3::new(x, 4.1, z), Vector3::new(1.5, 1.4, 1.3), wood);
+        }
+        append(
+            &mut builder.mesh.vertices,
+            &mut builder.mesh.indices,
+            forest::giant_low_mesh(),
+            Vector3::zero(),
+            1.0,
+            0.0,
+        );
+        let up = Vector3::new(0.0, 1.0, 0.0);
+        let radial = (secondary_root() + up * (0.997 / SIZE_FRACTION)).normalize();
+        append_oriented(
+            &mut builder.mesh.vertices,
+            &mut builder.mesh.indices,
+            forest::giant_low_mesh(),
+            secondary_root(),
+            1.0,
+            Quaternion::from_vector3_to_vector3(up, radial),
+        );
+        for vertex in &mut builder.mesh.vertices {
+            vertex.material_index = 0;
+        }
+        builder.mesh
+    })
+}
+
 impl WorldObject for Village {
     fn transform(&self) -> &WorldTransform {
         &self.transform
@@ -219,6 +281,17 @@ impl WorldObject for Village {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
     ) {
+        let radius = projected_sphere_radius(
+            self.transform.position,
+            self.bounding_radius().unwrap() * self.transform.scale.x.abs(),
+            uniforms,
+            framebuffer.height,
+        );
+        let full = !self.lod_enabled || detail::choose_full(self.full_detail, radius, 40.0, 30.0);
+        if full != self.full_detail {
+            renderer.record_lod_switch();
+        }
+        self.full_detail = full;
         let transform = &self.transform;
         let uniforms = Uniforms {
             model_matrix: Matrix::scale(transform.scale.x, transform.scale.y, transform.scale.z)
@@ -230,13 +303,30 @@ impl WorldObject for Village {
                 ),
             ..*uniforms
         };
-        renderer.render_lit(framebuffer, &uniforms, mesh());
+        renderer.render_lit(
+            framebuffer,
+            &uniforms,
+            if full { mesh() } else { low_mesh() },
+        );
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn village_lod_reduces_triangles_and_bounds_contain_both_meshes() {
+        let low = low_mesh();
+        assert!(low.indices.len() * 10 < mesh().indices.len());
+        let parent = WorldTransform::new(Vector3::zero(), Vector3::new(120.0, 120.0, 120.0));
+        let village = Village::attached_to(parent.anchor(), 120.0);
+        let bound = village.bounding_radius().unwrap();
+        for vertex in low.vertices.iter().chain(&mesh().vertices) {
+            assert!(vertex.position.length() <= bound + 0.001);
+            assert!((vertex.normal.length() - 1.0).abs() < 0.0001);
+        }
+    }
 
     #[test]
     fn village_and_both_roots_follow_the_orbiting_rotating_planet() {

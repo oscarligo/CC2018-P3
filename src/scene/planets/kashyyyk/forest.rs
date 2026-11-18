@@ -1,6 +1,7 @@
-use super::{surface, village};
+use super::{detail, surface, village};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::{Mesh, load_obj};
+use crate::rendering::projection::projected_sphere_radius;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::scene::world::{TransformAnchor, World, WorldObject, WorldTransform};
@@ -13,6 +14,7 @@ const TREE_COUNT: usize = 140;
 
 struct TreeModel {
     mesh: Mesh,
+    low_mesh: Mesh,
     radius: f32,
 }
 
@@ -31,13 +33,22 @@ fn models() -> &'static [TreeModel; 2] {
                 .iter()
                 .map(|v| v.position.length())
                 .fold(0.0, f32::max);
-            TreeModel { mesh, radius }
+            let low_mesh = detail::tree(path.ends_with("wroshyr.obj"));
+            TreeModel {
+                mesh,
+                low_mesh,
+                radius,
+            }
         })
     })
 }
 
 pub(super) fn giant_mesh() -> &'static Mesh {
     &models()[0].mesh
+}
+
+pub(super) fn giant_low_mesh() -> &'static Mesh {
+    &models()[0].low_mesh
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -105,21 +116,21 @@ fn placements(seed: u32, count: usize) -> Vec<Placement> {
     trees
 }
 
-pub(super) fn register(world: &mut World, parent: TransformAnchor, planet_radius: f32) {
+pub(super) fn register(world: &mut World, parent: TransformAnchor, planet_radius: f32, lod: bool) {
     // Carga y valida ambos OBJ una sola vez, antes de crear las instancias.
     models();
     for placement in placements(FOREST_SEED, TREE_COUNT) {
-        world.add(SurfaceTree::attached_to(
-            parent.clone(),
-            planet_radius,
-            placement,
-        ));
+        let mut tree = SurfaceTree::attached_to(parent.clone(), planet_radius, placement);
+        tree.lod_enabled = lod;
+        world.add(tree);
     }
 }
 
 struct SurfaceTree {
     transform: WorldTransform,
     model: usize,
+    lod_enabled: bool,
+    full_detail: bool,
 }
 
 impl SurfaceTree {
@@ -135,6 +146,8 @@ impl SurfaceTree {
         Self {
             transform,
             model: placement.model,
+            lod_enabled: true,
+            full_detail: false,
         }
     }
 }
@@ -158,6 +171,18 @@ impl WorldObject for SurfaceTree {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
     ) {
+        let model = &models()[self.model];
+        let radius = projected_sphere_radius(
+            self.transform.position,
+            model.radius * self.transform.scale.x.abs(),
+            uniforms,
+            framebuffer.height,
+        );
+        let full = !self.lod_enabled || detail::choose_full(self.full_detail, radius, 18.0, 12.0);
+        if full != self.full_detail {
+            renderer.record_lod_switch();
+        }
+        self.full_detail = full;
         let transform = &self.transform;
         let uniforms = Uniforms {
             model_matrix: Matrix::scale(transform.scale.x, transform.scale.y, transform.scale.z)
@@ -169,7 +194,11 @@ impl WorldObject for SurfaceTree {
                 ),
             ..*uniforms
         };
-        renderer.render_lit(framebuffer, &uniforms, &models()[self.model].mesh);
+        renderer.render_lit(
+            framebuffer,
+            &uniforms,
+            if full { &model.mesh } else { &model.low_mesh },
+        );
     }
 }
 
@@ -179,6 +208,47 @@ mod tests {
     use crate::celestial_shaders::CelestialKind;
     use crate::objects::celestial::CelestialBody;
     use crate::scene::world::{Orbit, WorldUpdate};
+
+    #[test]
+    fn forest_lod_reduces_submitted_triangles_and_restores_detail_nearby() {
+        use raylib::prelude::Color;
+        let parent = WorldTransform::new(Vector3::zero(), Vector3::new(120.0, 120.0, 120.0));
+        let mut placement = placements(FOREST_SEED, 1)[0];
+        placement.model = 0;
+        let mut tree = SurfaceTree::attached_to(parent.anchor(), 120.0, placement);
+        let mut framebuffer = Framebuffer::new(80, 60, Color::BLACK);
+        let mut renderer = Renderer::default();
+        let mut uniforms = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: tree.transform.position + Vector3::new(0.0, 0.0, 2000.0),
+            camera_target: tree.transform.position,
+            camera_up: Vector3::new(0.0, 1.0, 0.0),
+            light_position: None,
+        };
+        tree.draw(&mut renderer, &mut framebuffer, &uniforms);
+        let reduced = renderer.metrics().triangles;
+        tree.lod_enabled = false;
+        renderer.begin_frame();
+        tree.draw(&mut renderer, &mut framebuffer, &uniforms);
+        assert!(reduced * 10 < renderer.metrics().triangles);
+        tree.lod_enabled = true;
+        uniforms.camera_pos = tree.transform.position + Vector3::new(0.0, 0.0, 30.0);
+        renderer.begin_frame();
+        tree.draw(&mut renderer, &mut framebuffer, &uniforms);
+        assert_eq!(
+            renderer.metrics().triangles,
+            models()[0].mesh.indices.len() / 3
+        );
+        for model in models() {
+            assert!(
+                model
+                    .low_mesh
+                    .vertices
+                    .iter()
+                    .all(|v| v.position.length() <= model.radius + 0.001)
+            );
+        }
+    }
 
     #[test]
     fn forest_is_repeatable_varied_and_confined_to_suitable_land() {

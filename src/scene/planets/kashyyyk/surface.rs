@@ -2,12 +2,105 @@
 //! unido al planeta; solo el campo de nubes se desplaza con el tiempo.
 use crate::noise::{fbm, smoothstep};
 use raylib::prelude::Vector3;
+use std::sync::OnceLock;
 
 const SEA_LEVEL: f32 = 0.45;
 const CLOUD_SPEED: f32 = 0.018;
+const GROUND_GRID: usize = 65;
+const CLOUD_GRID: usize = 32;
+
+struct NoiseFields {
+    ground: Vec<Vector3>,
+    clouds: Vec<f32>,
+}
+
+fn fields() -> &'static NoiseFields {
+    static FIELDS: OnceLock<NoiseFields> = OnceLock::new();
+    FIELDS.get_or_init(|| {
+        let mut ground = Vec::with_capacity(GROUND_GRID.pow(3));
+        for z in 0..GROUND_GRID {
+            for y in 0..GROUND_GRID {
+                for x in 0..GROUND_GRID {
+                    ground.push(ground_color(
+                        Vector3::new(x as f32, y as f32, z as f32) * (1.0 / 32.0)
+                            - Vector3::new(1.0, 1.0, 1.0),
+                    ));
+                }
+            }
+        }
+        let mut clouds = Vec::with_capacity(CLOUD_GRID.pow(3));
+        for z in 0..CLOUD_GRID {
+            for y in 0..CLOUD_GRID {
+                for x in 0..CLOUD_GRID {
+                    clouds.push(fbm(Vector3::new(x as f32, y as f32, z as f32) * 0.25, 2));
+                }
+            }
+        }
+        NoiseFields { ground, clouds }
+    })
+}
+
+pub(super) fn prepare() {
+    fields();
+}
+
+/// Interpolación trilineal de campos CPU. Las nubes envuelven sus índices;
+/// el terreno usa un volumen continuo que cubre la esfera sin costuras UV.
+trait FieldValue: Copy {
+    fn blend(a: Self, b: Self, t: f32) -> Self;
+}
+
+impl FieldValue for f32 {
+    fn blend(a: Self, b: Self, t: f32) -> Self {
+        a + (b - a) * t
+    }
+}
+
+impl FieldValue for Vector3 {
+    fn blend(a: Self, b: Self, t: f32) -> Self {
+        Vector3::new(
+            a.x + (b.x - a.x) * t,
+            a.y + (b.y - a.y) * t,
+            a.z + (b.z - a.z) * t,
+        )
+    }
+}
+
+fn sample<T: FieldValue>(data: &[T], size: usize, point: Vector3, periodic: bool) -> T {
+    let axes = [point.x, point.y, point.z].map(|value| {
+        let value = if periodic {
+            value.rem_euclid(size as f32)
+        } else {
+            value.clamp(0.0, (size - 1) as f32)
+        };
+        let first = value.floor() as usize;
+        let next = if periodic {
+            (first + 1) % size
+        } else {
+            (first + 1).min(size - 1)
+        };
+        (first, next, value - first as f32)
+    });
+    let at = |x: usize, y: usize, z: usize| data[z * size * size + y * size + x];
+    let lerp = T::blend;
+    let [(x0, x1, x), (y0, y1, y), (z0, z1, z)] = axes;
+    lerp(
+        lerp(
+            lerp(at(x0, y0, z0), at(x1, y0, z0), x),
+            lerp(at(x0, y1, z0), at(x1, y1, z0), x),
+            y,
+        ),
+        lerp(
+            lerp(at(x0, y0, z1), at(x1, y0, z1), x),
+            lerp(at(x0, y1, z1), at(x1, y1, z1), x),
+            y,
+        ),
+        z,
+    )
+}
 
 fn mix(a: Vector3, b: Vector3, amount: f32) -> Vector3 {
-    a + (b - a) * amount.clamp(0.0, 1.0)
+    Vector3::blend(a, b, amount.clamp(0.0, 1.0))
 }
 
 fn elevation(point: Vector3) -> f32 {
@@ -28,16 +121,20 @@ pub(super) fn forest_weight(point: Vector3) -> f32 {
 }
 
 fn cloud_cover(point: Vector3, time: f32) -> f32 {
-    let flow = Vector3::new(time * CLOUD_SPEED, time * 0.004, -time * 0.011);
-    smoothstep(0.59, 0.76, fbm(point * 5.2 + flow, 2)) * 0.72
+    let noise = sample(
+        &fields().clouds,
+        CLOUD_GRID,
+        Vector3::new(
+            (point.x * 5.2 + time * CLOUD_SPEED) * 4.0,
+            (point.y * 5.2 + time * 0.004) * 4.0,
+            (point.z * 5.2 - time * 0.011) * 4.0,
+        ),
+        true,
+    );
+    smoothstep(0.59, 0.76, noise) * 0.72
 }
 
-pub(super) fn shade(
-    point: Vector3,
-    normal: Vector3,
-    time: f32,
-    light_direction: Vector3,
-) -> Vector3 {
+fn ground_color(point: Vector3) -> Vector3 {
     let height = elevation(point);
     let detail = fbm(point * 23.0, 2);
     let density = vegetation_density(point);
@@ -62,23 +159,82 @@ pub(super) fn shade(
         Vector3::new(0.025, 0.27, 0.29),
         smoothstep(SEA_LEVEL - 0.10, SEA_LEVEL, height),
     );
-    let ground = mix(
+    mix(
         water,
         coast,
         smoothstep(SEA_LEVEL - 0.008, SEA_LEVEL + 0.012, height),
+    )
+}
+
+pub(super) fn shade(
+    point: Vector3,
+    normal: Vector3,
+    time: f32,
+    light_direction: Vector3,
+) -> Vector3 {
+    let ground = sample(
+        &fields().ground,
+        GROUND_GRID,
+        Vector3::new(
+            point.x * 32.0 + 32.0,
+            point.y * 32.0 + 32.0,
+            point.z * 32.0 + 32.0,
+        ),
+        false,
     );
     let color = mix(
         ground,
         Vector3::new(0.83, 0.89, 0.86),
         cloud_cover(point, time),
     );
-    let diffuse = normal.dot(light_direction).max(0.0).sqrt();
-    color * (0.08 + diffuse * 0.92)
+    let diffuse = (normal.x * light_direction.x
+        + normal.y * light_direction.y
+        + normal.z * light_direction.z)
+        .max(0.0)
+        .sqrt();
+    let intensity = 0.08 + diffuse * 0.92;
+    Vector3::new(
+        color.x * intensity,
+        color.y * intensity,
+        color.z * intensity,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cached_fields_interpolate_and_clouds_wrap_continuously() {
+        let data = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0];
+        assert_eq!(sample(&data, 2, Vector3::new(0.5, 0.5, 0.5), false), 3.5);
+        let a = sample(
+            &fields().clouds,
+            CLOUD_GRID,
+            Vector3::new(-0.2, 3.4, 2.1),
+            true,
+        );
+        let b = sample(
+            &fields().clouds,
+            CLOUD_GRID,
+            Vector3::new(31.8, 3.4, 2.1),
+            true,
+        );
+        assert!((a - b).abs() < 0.00001);
+        for point in [
+            Vector3::new(0.0, 1.0, 0.0),
+            Vector3::new(-0.5, 0.25, 0.75),
+            Vector3::new(1.0, 0.0, 0.0),
+        ] {
+            let cached = sample(
+                &fields().ground,
+                GROUND_GRID,
+                point * 32.0 + Vector3::new(32.0, 32.0, 32.0),
+                false,
+            );
+            assert!((cached - ground_color(point)).length() < 0.00001);
+        }
+    }
 
     #[test]
     fn terrain_is_reproducible_and_contains_land_and_water() {

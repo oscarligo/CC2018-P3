@@ -125,6 +125,15 @@ impl LodTransition {
 /// Posición local, normal mundial, tiempo y dirección al sol.
 type SurfaceShader = fn(Vector3, Vector3, f32, Vector3) -> Vector3;
 
+fn surface_normalize(v: Vector3) -> Vector3 {
+    let length_squared = v.x * v.x + v.y * v.y + v.z * v.z;
+    if length_squared <= f32::EPSILON {
+        return Vector3::zero();
+    }
+    let inverse = 1.0 / length_squared.sqrt();
+    Vector3::new(v.x * inverse, v.y * inverse, v.z * inverse)
+}
+
 pub struct CelestialBody {
     fragment_surface: Option<SurfaceShader>,
     colors: Vec<Vector3>,
@@ -494,14 +503,14 @@ impl WorldObject for CelestialBody {
         if let Some(shader) = self.fragment_surface {
             let rotation = self.transform.rotation.to_matrix();
             renderer.render_surface(framebuffer, &body_uniforms, mesh, |surface| {
-                let normal = surface.normal.normalize();
+                let normal = surface_normalize(surface.normal);
                 let world_normal = Vector3::new(
                     rotation.m0 * normal.x + rotation.m4 * normal.y + rotation.m8 * normal.z,
                     rotation.m1 * normal.x + rotation.m5 * normal.y + rotation.m9 * normal.z,
                     rotation.m2 * normal.x + rotation.m6 * normal.y + rotation.m10 * normal.z,
                 );
                 shader(
-                    surface.position.normalize(),
+                    surface_normalize(surface.position),
                     world_normal,
                     self.time,
                     self.light_direction,

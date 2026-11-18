@@ -1,10 +1,19 @@
 use crate::rendering::fragment::{Fragment, SurfacePoint};
 use crate::rendering::vertex::Vertex;
-use raylib::prelude::Vector2;
+use raylib::prelude::{Vector2, Vector3};
 
 // Triangle constants
 const EPSILON: f32 = 1e-5;
 const PIXEL_CENTER_OFFSET: f32 = 0.5;
+
+// Matemática escalar Rust en el bucle por píxel: evita llamadas FFI de raymath.
+fn weighted(a: Vector3, b: Vector3, c: Vector3, w: [f32; 3]) -> Vector3 {
+    Vector3::new(
+        a.x * w[0] + b.x * w[1] + c.x * w[2],
+        a.y * w[0] + b.y * w[1] + c.y * w[2],
+        a.z * w[0] + b.z * w[1] + c.z * w[2],
+    )
+}
 
 fn positions(a: &Vertex, b: &Vertex, c: &Vertex) -> Option<[Vector2; 3]> {
     Some([a.screen_position?, b.screen_position?, c.screen_position?])
@@ -25,17 +34,19 @@ fn fragment_at(
     interpolate_alpha: bool,
     interpolate_surface: bool,
 ) -> Fragment {
-    let inverse_depth = weights[0] / vertices[0].camera_depth
-        + weights[1] / vertices[1].camera_depth
-        + weights[2] / vertices[2].camera_depth;
-    let corrected = [
-        weights[0] / vertices[0].camera_depth / inverse_depth,
-        weights[1] / vertices[1].camera_depth / inverse_depth,
-        weights[2] / vertices[2].camera_depth / inverse_depth,
+    let scaled = [
+        weights[0] / vertices[0].camera_depth,
+        weights[1] / vertices[1].camera_depth,
+        weights[2] / vertices[2].camera_depth,
     ];
-    let color = vertices[0].color * corrected[0]
-        + vertices[1].color * corrected[1]
-        + vertices[2].color * corrected[2];
+    let depth = 1.0 / (scaled[0] + scaled[1] + scaled[2]);
+    let corrected = [scaled[0] * depth, scaled[1] * depth, scaled[2] * depth];
+    let color = weighted(
+        vertices[0].color,
+        vertices[1].color,
+        vertices[2].color,
+        corrected,
+    );
     let alpha = if interpolate_alpha {
         vertices[0].alpha * corrected[0]
             + vertices[1].alpha * corrected[1]
@@ -43,7 +54,6 @@ fn fragment_at(
     } else {
         1.0
     };
-    let depth = 1.0 / inverse_depth;
     let tex_coord = match (
         vertices[0].tex_coord,
         vertices[1].tex_coord,
@@ -55,12 +65,18 @@ fn fragment_at(
 
     Fragment {
         surface: interpolate_surface.then(|| SurfacePoint {
-            position: vertices[0].position * corrected[0]
-                + vertices[1].position * corrected[1]
-                + vertices[2].position * corrected[2],
-            normal: vertices[0].normal * corrected[0]
-                + vertices[1].normal * corrected[1]
-                + vertices[2].normal * corrected[2],
+            position: weighted(
+                vertices[0].position,
+                vertices[1].position,
+                vertices[2].position,
+                corrected,
+            ),
+            normal: weighted(
+                vertices[0].normal,
+                vertices[1].normal,
+                vertices[2].normal,
+                corrected,
+            ),
         }),
         position,
         color,
@@ -71,11 +87,11 @@ fn fragment_at(
     }
 }
 
-fn barycentric(point: Vector2, positions: [Vector2; 3], area: f32) -> [f32; 3] {
+fn barycentric(point: Vector2, positions: [Vector2; 3], inverse_area: f32) -> [f32; 3] {
     [
-        edge(positions[1], positions[2], point) / area,
-        edge(positions[2], positions[0], point) / area,
-        edge(positions[0], positions[1], point) / area,
+        edge(positions[1], positions[2], point) * inverse_area,
+        edge(positions[2], positions[0], point) * inverse_area,
+        edge(positions[0], positions[1], point) * inverse_area,
     ]
 }
 
@@ -96,6 +112,7 @@ pub fn triangle_scanline(
     if area.abs() <= EPSILON {
         return 0;
     }
+    let inverse_area = 1.0 / area;
 
     if width == 0 || height == 0 {
         return 0;
@@ -156,7 +173,7 @@ pub fn triangle_scanline(
 
         for x in min_x..=max_x {
             let center = Vector2::new(x as f32 + PIXEL_CENTER_OFFSET, sample_y);
-            let weights = barycentric(center, points, area);
+            let weights = barycentric(center, points, inverse_area);
             if weights.iter().all(|weight| *weight >= -EPSILON) {
                 emit(fragment_at(
                     center,

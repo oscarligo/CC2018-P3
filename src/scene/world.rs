@@ -451,6 +451,17 @@ impl World {
         framebuffer: &mut Framebuffer,
         uniforms: &Uniforms,
     ) {
+        self.draw_with_culling(renderer, framebuffer, uniforms, true);
+    }
+
+    /// Permite comparar el descarte en el benchmark; el vuelo normal lo activa.
+    pub(crate) fn draw_with_culling(
+        &mut self,
+        renderer: &mut Renderer,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        frustum_culling: bool,
+    ) {
         let light_position = self.primary_light_position().or(uniforms.light_position);
         let scene_uniforms = Uniforms {
             light_position,
@@ -464,6 +475,7 @@ impl World {
             renderer,
             framebuffer,
             &scene_uniforms,
+            frustum_culling,
         );
         draw_pass(
             &mut self.objects,
@@ -472,6 +484,7 @@ impl World {
             renderer,
             framebuffer,
             &scene_uniforms,
+            frustum_culling,
         );
     }
 
@@ -490,28 +503,30 @@ fn draw_pass(
     renderer: &mut Renderer,
     framebuffer: &mut Framebuffer,
     uniforms: &Uniforms,
+    frustum_culling: bool,
 ) {
     let mut draw_object = |entry: &mut WorldEntry| {
         let object = &mut entry.object;
         if object.render_pass() != pass {
             return;
         }
-        let culled = object.bounding_radius().is_some_and(|local_radius| {
-            let transform = object.transform();
-            let scale = transform
-                .scale
-                .x
-                .abs()
-                .max(transform.scale.y.abs())
-                .max(transform.scale.z.abs());
-            !sphere_is_visible(
-                transform.position,
-                local_radius * scale,
-                uniforms,
-                framebuffer.width,
-                framebuffer.height,
-            )
-        });
+        let culled = frustum_culling
+            && object.bounding_radius().is_some_and(|local_radius| {
+                let transform = object.transform();
+                let scale = transform
+                    .scale
+                    .x
+                    .abs()
+                    .max(transform.scale.y.abs())
+                    .max(transform.scale.z.abs());
+                !sphere_is_visible(
+                    transform.position,
+                    local_radius * scale,
+                    uniforms,
+                    framebuffer.width,
+                    framebuffer.height,
+                )
+            });
         renderer.record_object(culled);
         if !culled {
             object.draw(renderer, framebuffer, uniforms);
@@ -563,6 +578,33 @@ mod tests {
     use std::cell::RefCell;
     use std::f32::consts::PI;
     use std::rc::Rc;
+
+    #[test]
+    fn frustum_culling_reduces_submitted_triangle_count() {
+        use crate::celestial_shaders::CelestialKind;
+        use crate::objects::celestial::CelestialBody;
+        let mut world = World::new();
+        world.add(
+            CelestialBody::new(CelestialKind::Rocky, Vector3::new(100.0, 0.0, 10.0))
+                .with_scale(1.0),
+        );
+        let mut renderer = Renderer::default();
+        let mut framebuffer = Framebuffer::new(80, 60, Color::BLACK);
+        let uniforms = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: Vector3::zero(),
+            camera_target: Vector3::new(0.0, 0.0, 1.0),
+            camera_up: Vector3::new(0.0, 1.0, 0.0),
+            light_position: None,
+        };
+        world.draw(&mut renderer, &mut framebuffer, &uniforms);
+        assert_eq!(renderer.metrics().triangles, 0);
+        assert_eq!(renderer.metrics().culled_objects, 1);
+        renderer.begin_frame();
+        world.draw_with_culling(&mut renderer, &mut framebuffer, &uniforms, false);
+        assert_eq!(renderer.metrics().culled_objects, 0);
+        assert!(renderer.metrics().triangles > 0);
+    }
 
     struct TestObject {
         transform: WorldTransform,
