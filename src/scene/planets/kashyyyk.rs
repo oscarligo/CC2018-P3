@@ -1,5 +1,6 @@
 mod forest;
 mod surface;
+mod village;
 
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::objects::celestial::CelestialBody;
@@ -41,5 +42,6 @@ pub(super) fn registrar(world: &mut World) {
 
     let anchor = planet.transform.anchor();
     world.add(planet);
-    forest::register(world, anchor, RADIUS);
+    forest::register(world, anchor.clone(), RADIUS);
+    village::register(world, anchor, RADIUS);
 }

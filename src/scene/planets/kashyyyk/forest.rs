@@ -1,4 +1,4 @@
-use super::surface;
+use super::{surface, village};
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::{Mesh, load_obj};
 use crate::rendering::render::Renderer;
@@ -36,6 +36,10 @@ fn models() -> &'static [TreeModel; 2] {
     })
 }
 
+pub(super) fn giant_mesh() -> &'static Mesh {
+    &models()[0].mesh
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct Placement {
     direction: Vector3,
@@ -68,6 +72,9 @@ fn placements(seed: u32, count: usize) -> Vec<Placement> {
         let angle = random.unit() * TAU;
         let horizontal = (1.0 - y * y).sqrt();
         let direction = Vector3::new(horizontal * angle.cos(), y, horizontal * angle.sin());
+        if village::is_reserved(direction) {
+            continue;
+        }
         let density = surface::forest_weight(direction);
         if density <= 0.0 || random.unit() > density {
             continue;
@@ -183,6 +190,7 @@ mod tests {
         assert!(first.iter().any(|p| p.model == 1));
         for p in &first {
             assert!(surface::forest_weight(p.direction) > 0.0);
+            assert!(!village::is_reserved(p.direction));
             assert!((p.direction.length() - 1.0).abs() < 0.0001);
         }
     }
