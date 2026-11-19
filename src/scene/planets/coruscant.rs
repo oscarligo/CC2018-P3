@@ -1,3 +1,5 @@
+mod architecture;
+mod district;
 mod surface;
 
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
@@ -38,5 +40,7 @@ pub(super) fn registrar(world: &mut World) {
     ))
     .with_fragment_shader(surface::shade);
 
+    let anchor = planet.transform.anchor();
     world.add(planet);
+    district::register(world, anchor, RADIUS);
 }

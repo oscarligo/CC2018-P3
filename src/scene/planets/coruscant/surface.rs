@@ -4,13 +4,37 @@ use std::sync::OnceLock;
 
 const DISTRICT_COUNT: usize = 56;
 const FACE_SIZE: usize = 513;
+const EAST_WARP: f32 = 0.012;
+const NORTH_WARP: f32 = 0.014;
 
-struct District {
-    center: Vector3,
-    east: Vector3,
+pub(super) struct District {
+    pub(super) center: Vector3,
+    pub(super) east: Vector3,
     north: Vector3,
     density: f32,
-    spacing: f32,
+    pub(super) spacing: f32,
+}
+
+impl District {
+    pub(super) fn north_spacing(&self) -> f32 {
+        self.spacing * 1.4
+    }
+
+    pub(super) fn block_direction(&self, x: f32, z: f32) -> Vector3 {
+        let project = |x: f32, z: f32| {
+            self.center * (1.0 - x * x - z * z).sqrt() + self.east * x + self.north * z
+        };
+        let mut point = project(x, z);
+        // Compensar la curvatura de las avenidas para colocar cada edificio dentro de su manzana.
+        for _ in 0..2 {
+            let (region, neighborhood) = urban_noise(point);
+            point = project(
+                x - (neighborhood - 0.5) * EAST_WARP,
+                z - (region - 0.5) * NORTH_WARP,
+            );
+        }
+        point
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -56,6 +80,25 @@ fn district(index: usize) -> District {
     }
 }
 
+fn districts() -> &'static [District; DISTRICT_COUNT] {
+    static DISTRICTS: OnceLock<[District; DISTRICT_COUNT]> = OnceLock::new();
+    DISTRICTS.get_or_init(|| std::array::from_fn(district))
+}
+
+pub(super) fn nearest_district(point: Vector3) -> &'static District {
+    districts()
+        .iter()
+        .max_by(|a, b| point.dot(a.center).total_cmp(&point.dot(b.center)))
+        .expect("Coruscant tiene distritos urbanos")
+}
+
+fn urban_noise(point: Vector3) -> (f32, f32) {
+    (
+        value_noise_3d(point * 6.5 + Vector3::new(0.8, 6.4, 3.7)),
+        value_noise_3d(point * 22.0 + Vector3::new(2.4, 7.1, 5.9)),
+    )
+}
+
 fn city(point: Vector3, districts: &[District; DISTRICT_COUNT]) -> CitySample {
     let mut closest = &districts[0];
     let mut nearest = -2.0_f32;
@@ -74,8 +117,7 @@ fn city(point: Vector3, districts: &[District; DISTRICT_COUNT]) -> CitySample {
     let x = point.dot(closest.east);
     let y = point.dot(closest.north);
     let distance = (x * x + y * y).sqrt();
-    let region = value_noise_3d(point * 6.5 + Vector3::new(0.8, 6.4, 3.7));
-    let neighborhood = value_noise_3d(point * 22.0 + Vector3::new(2.4, 7.1, 5.9));
+    let (region, neighborhood) = urban_noise(point);
     let blocks = value_noise_3d(point * 94.0 + Vector3::new(9.1, 4.7, 2.6));
     let activity = smoothstep(0.25, 0.75, region * 0.62 + neighborhood * 0.38);
     let border = nearest - next_nearest;
@@ -94,8 +136,8 @@ fn city(point: Vector3, districts: &[District; DISTRICT_COUNT]) -> CitySample {
         let lane = coordinate / spacing;
         (lane - lane.round()).abs()
     };
-    let street_x = street_distance(x + (neighborhood - 0.5) * 0.012, closest.spacing);
-    let street_y = street_distance(y + (region - 0.5) * 0.014, closest.spacing * 1.4);
+    let street_x = street_distance(x + (neighborhood - 0.5) * EAST_WARP, closest.spacing);
+    let street_y = street_distance(y + (region - 0.5) * NORTH_WARP, closest.north_spacing());
     let grid = (1.0 - smoothstep(0.035, 0.20, street_x.min(street_y))) * inside;
 
     let metal = 0.20 + neighborhood * 0.32 + blocks * 0.30 + (1.0 - grid) * 0.18;
@@ -114,7 +156,7 @@ fn city(point: Vector3, districts: &[District; DISTRICT_COUNT]) -> CitySample {
 fn city_faces() -> &'static [Vec<CitySample>; 6] {
     static FACES: OnceLock<[Vec<CitySample>; 6]> = OnceLock::new();
     FACES.get_or_init(|| {
-        let districts = std::array::from_fn(district);
+        let districts = districts();
         std::array::from_fn(|face| {
             let side = if face % 2 == 0 { 1.0 } else { -1.0 };
             let mut samples = Vec::with_capacity(FACE_SIZE * FACE_SIZE);
@@ -127,7 +169,7 @@ fn city_faces() -> &'static [Vec<CitySample>; 6] {
                         1 => Vector3::new(u, side, v),
                         _ => Vector3::new(u, v, side),
                     };
-                    samples.push(city(point.normalize(), &districts));
+                    samples.push(city(point.normalize(), districts));
                 }
             }
             samples
@@ -137,6 +179,44 @@ fn city_faces() -> &'static [Vec<CitySample>; 6] {
 
 pub(super) fn prepare() {
     city_faces();
+    district_map();
+}
+
+// El mapa local concentra la resolución donde la nave puede sobrevolar los edificios.
+const DISTRICT_EXTENT: f32 = 0.23;
+
+fn district_map() -> &'static Vec<CitySample> {
+    static MAP: OnceLock<Vec<CitySample>> = OnceLock::new();
+    MAP.get_or_init(|| {
+        let site = super::district::site();
+        let mut samples = Vec::with_capacity(FACE_SIZE * FACE_SIZE);
+        for row in 0..FACE_SIZE {
+            for column in 0..FACE_SIZE {
+                let offset = |index: usize| {
+                    (2.0 * index as f32 / (FACE_SIZE - 1) as f32 - 1.0) * DISTRICT_EXTENT
+                };
+                let (x, z) = (offset(column), offset(row));
+                let point =
+                    site.center * (1.0 - x * x - z * z).sqrt() + site.east * x + site.north * z;
+                let mut sample = city(point, districts());
+                let (region, neighborhood) = urban_noise(point);
+                let u = (x + (neighborhood - 0.5) * EAST_WARP) / site.spacing;
+                let v = (z + (region - 0.5) * NORTH_WARP) / site.north_spacing();
+                let edge = |value: f32| (value - value.round()).abs();
+                let road = edge(u).min(edge(v));
+                let curb = 1.0 - smoothstep(0.012, 0.042, (road - 0.12).abs());
+                let parcel = smoothstep(0.12, 0.18, road);
+                let seam = edge(u * 3.0).min(edge(v * 4.0));
+                let panel = smoothstep(0.025, 0.10, seam) * parcel;
+                sample.metal =
+                    (0.32 + 0.52 * sample.metal + 0.24 * panel - 0.16 * curb).clamp(0.0, 1.0);
+                sample.streets = (0.76 * sample.streets + 0.34 * curb).min(1.0);
+                sample.rooftops += 0.11 * panel * smoothstep(0.40, 0.75, neighborhood);
+                samples.push(sample);
+            }
+        }
+        samples
+    })
 }
 
 fn sample_city(point: Vector3) -> CitySample {
@@ -149,25 +229,38 @@ fn sample_city(point: Vector3) -> CitySample {
     } else {
         (4 + usize::from(point.z < 0.0), point.x / z, point.y / z)
     };
+    sample_grid(&city_faces()[face], u, v)
+}
+
+fn sample_grid(samples: &[CitySample], u: f32, v: f32) -> CitySample {
     let last = FACE_SIZE - 1;
     let u = (u + 1.0) * (last as f32 * 0.5);
     let v = (v + 1.0) * (last as f32 * 0.5);
     let (x, y) = (u as usize, v as usize);
     let (next_x, next_y) = ((x + 1).min(last), (y + 1).min(last));
     let (u, v) = (u - x as f32, v - y as f32);
-    let samples = &city_faces()[face];
     let top = samples[y * FACE_SIZE + x].blend(samples[y * FACE_SIZE + next_x], u);
     let bottom = samples[next_y * FACE_SIZE + x].blend(samples[next_y * FACE_SIZE + next_x], u);
     top.blend(bottom, v)
 }
 
 pub(super) fn shade(point: Vector3, normal: Vector3, _time: f32, light: Vector3) -> Vector3 {
-    let city = sample_city(point);
+    let site = super::district::site();
+    let mut city = sample_city(point);
+    if point.dot(site.center) > 0.94 {
+        let u = point.dot(site.east) / DISTRICT_EXTENT;
+        let v = point.dot(site.north) / DISTRICT_EXTENT;
+        let extent = u.abs().max(v.abs());
+        if extent < 1.0 {
+            let local = sample_grid(district_map(), u, v);
+            city = local.blend(city, smoothstep(0.82, 1.0, extent));
+        }
+    }
     let sun = normal.x * light.x + normal.y * light.y + normal.z * light.z;
     let daylight = sun.max(0.0);
     let night = 1.0 - smoothstep(-0.12, 0.40, sun);
-    let metal = 0.16 + daylight * 0.60 + city.metal * 0.27;
-    let amber = city.streets * (0.13 + 0.75 * night);
+    let metal = 0.10 + city.metal * (0.44 + daylight * 0.90);
+    let amber = city.streets * (0.27 + 0.63 * night);
     let cool = city.rooftops * (0.20 + 0.65 * night);
     Vector3::new(
         (0.23 * metal + 0.99 * amber + 0.55 * cool).min(1.0),
