@@ -33,6 +33,10 @@ const WINDOW_TITLE: &str = "Software Renderer";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--preview-dyson") {
+        preview_dyson();
+        return;
+    }
     if std::env::args().any(|arg| arg == "--preview-alien") {
         preview_alien();
         return;
@@ -354,6 +358,36 @@ fn preview_impacts() {
     }
 }
 
+fn preview_dyson() {
+    std::fs::create_dir_all("target/previews").expect("crear capturas");
+    for (label, time, offset) in [
+        ("dyson-00", 0.0, Vector3::new(120., 230., -1300.)),
+        ("dyson-12", 12.0, Vector3::new(120., 230., -1300.)),
+        ("dyson-28", 28.0, Vector3::new(120., 230., -1300.)),
+        ("dyson-interior", 8.0, Vector3::new(120., 80., -480.)),
+    ] {
+        let mut world = build_solar_system();
+        world.update(&WorldUpdate { frame_time: time });
+        let sun = world.primary_light_position().unwrap();
+        let mut u = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: sun + offset,
+            camera_target: sun,
+            camera_up: Vector3::new(0., 1., 0.),
+            light_position: Some(sun),
+        };
+        if label == "dyson-interior" {
+            u = objects::dyson::interior_view(sun, world.primary_light_bounds().unwrap().1, time);
+        }
+        let mut fb = Framebuffer::new(1200, 800, Color::new(3, 7, 15, 255));
+        Starfield::new().draw(&mut fb, &u);
+        world.draw(&mut Renderer::default(), &mut fb, &u);
+        fb.save_png(format!("target/previews/{label}.png"))
+            .expect("guardar Dyson");
+    }
+    println!("Capturas Dyson: target/previews/dyson-*.png");
+}
+
 fn run_benchmark(object_count: usize) {
     const BENCHMARK_FRAMES: usize = 240;
     const BENCHMARK_FRAME_TIME: f32 = 1.0 / 60.0;
@@ -517,6 +551,11 @@ mod benchmark_tests {
         );
     }
 
+    #[test]
+    #[ignore = "Capturas de revision de ambos aros Dyson"]
+    fn capture_dyson() {
+        preview_dyson();
+    }
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()

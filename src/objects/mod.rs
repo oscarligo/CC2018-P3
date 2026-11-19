@@ -7,6 +7,7 @@ use raylib::prelude::Vector3;
 pub mod atmosphere;
 mod catalog;
 pub mod celestial;
+pub(crate) mod dyson;
 mod inspections;
 pub mod ring;
 pub mod rock;

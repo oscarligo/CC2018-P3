@@ -7,6 +7,7 @@ pub fn build_solar_system() -> World {
     // El catálogo crea el sol; los planetas independientes reutilizan su posición.
     crate::objects::register_all(&mut world);
     crate::scene::planets::register_all(&mut world);
+    crate::objects::dyson::register(&mut world);
 
     world
 }
