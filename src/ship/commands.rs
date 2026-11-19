@@ -4,6 +4,7 @@ pub enum Command {
     Jump,
     Sneeze,
     Chase,
+    Radio,
 }
 
 #[derive(Default)]
@@ -41,6 +42,7 @@ impl CommandReader {
             ("3.14", Command::Jump),
             ("achu", Command::Sneeze),
             ("mishmish", Command::Chase),
+            ("fm", Command::Radio),
         ] {
             if self.tail.ends_with(code) {
                 self.clear();
@@ -57,7 +59,7 @@ mod tests {
     #[test]
     fn all_commands_share_the_queue_and_preserve_spaces() {
         let mut reader = CommandReader::default();
-        let commands = "3.14 ACHU mishmish 3,14"
+        let commands = "3.14 ACHU mishmish 3,14 FM"
             .chars()
             .filter_map(|c| reader.push(c))
             .collect::<Vec<_>>();
@@ -68,6 +70,7 @@ mod tests {
                 Command::Sneeze,
                 Command::Chase,
                 Command::Jump,
+                Command::Radio
             ]
         );
         for c in "mish".chars() {

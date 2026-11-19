@@ -37,6 +37,7 @@ pub struct RocketAudio<'audio> {
     moving_duration: f32,
     flying_music: Music<'audio>,
     flying_volume: f32,
+    radio_gain: f32,
 }
 
 impl<'audio> RocketAudio<'audio> {
@@ -81,7 +82,13 @@ impl<'audio> RocketAudio<'audio> {
             moving_duration,
             flying_music,
             flying_volume: 0.0,
+            radio_gain: 1.0,
         }
+    }
+
+    pub fn set_radio_active(&mut self, active: bool, dt: f32) -> f32 {
+        self.radio_gain = radio_gain(self.radio_gain, active, dt);
+        self.radio_gain
     }
 
     pub fn moving_duration(&self) -> f32 {
@@ -134,6 +141,15 @@ impl<'audio> RocketAudio<'audio> {
             frame_time,
         );
         self.update_moving(thrust && !braking, can_accelerate, speed_ratio, frame_time);
+        for (music, volume) in [
+            (&self.music, self.volume),
+            (&self.braking_music, self.braking_volume),
+            (&self.idle_music, self.idle_volume),
+            (&self.moving_music, self.moving_volume),
+            (&self.flying_music, self.flying_volume),
+        ] {
+            music.set_volume(volume * self.radio_gain);
+        }
     }
 
     fn update_moving(
@@ -177,7 +193,6 @@ impl<'audio> RocketAudio<'audio> {
             MOVING_FADE_OUT_RATE
         };
         self.moving_volume = smooth_towards(self.moving_volume, target, fade_rate, frame_time);
-        self.moving_music.set_volume(self.moving_volume);
 
         if !thrust
             && self.moving_volume <= MOVING_SILENCE_THRESHOLD
@@ -214,7 +229,6 @@ fn update_loop(
         fade_out_speed
     };
     *volume = move_towards(*volume, target, fade_speed * frame_time);
-    music.set_volume(*volume);
 
     if !active && *volume <= f32::EPSILON && music.is_stream_playing() {
         music.stop_stream();
@@ -227,4 +241,30 @@ fn move_towards(current: f32, target: f32, max_delta: f32) -> f32 {
 
 fn smooth_towards(current: f32, target: f32, rate: f32, frame_time: f32) -> f32 {
     target + (current - target) * (-rate * frame_time).exp()
+}
+
+// Lower effects to 20% with music, and restore them gently when it stops.
+fn radio_gain(current: f32, active: bool, dt: f32) -> f32 {
+    smooth_towards(
+        current,
+        if active { 0.2 } else { 1.0 },
+        if active { 12.0 } else { 6.0 },
+        dt.max(0.0),
+    )
+}
+#[cfg(test)]
+mod radio_tests {
+    use super::*;
+    #[test]
+    fn ducking_is_smooth_reversible_and_frame_rate_independent() {
+        let mut gain = 1.0;
+        for _ in 0..60 {
+            gain = radio_gain(gain, true, 1.0 / 60.0);
+        }
+        assert!((gain - 0.2).abs() < 0.001);
+        assert!((gain - radio_gain(1.0, true, 1.0)).abs() < 0.00001);
+        let restored = radio_gain(gain, false, 0.1);
+        assert!(restored > gain && restored < 1.0);
+        assert!((radio_gain(gain, false, 1.0) - 1.0).abs() < 0.003);
+    }
 }

@@ -34,6 +34,9 @@ impl<'a> AlienAudio<'a> {
             resume: [false; 5],
         }
     }
+    pub fn set_impact_gain(&self, gain: f32) {
+        self.impact.set_volume(0.48 * gain);
+    }
     pub fn play(&self, cues: &[Cue]) {
         for cue in cues {
             match cue {

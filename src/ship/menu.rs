@@ -93,7 +93,7 @@ pub fn choose_vehicle(
             button(d, 48, 430, 340, "1   CARRO ORIGINAL", selected == 0);
             button(d, 412, 430, 340, "2   OVNI / GATO ALIEN", selected == 1);
             let info = if selected == 0 {
-                "Vuelo clasico / Velocidad 1x"
+                "Vuelo clasico / Velocidad 1x / fm: radio del carro"
             } else {
                 "Espacio: acelerar / R: giro / mishmish: punteria / achu"
             };
@@ -179,7 +179,7 @@ impl TravelMenu {
                 if kind == VehicleKind::Saucer {
                     "OVNI  /  3x  /  Teletransporte: 3.14"
                 } else {
-                    "CARRO  /  1x"
+                    "CARRO  /  1x  /  fm: radio"
                 },
                 28,
                 24,

@@ -8,6 +8,7 @@ mod impact;
 mod input;
 pub(crate) mod menu;
 mod movement;
+pub(crate) mod radio;
 pub(crate) mod vehicle;
 
 pub(crate) use audio::RocketAudio;
