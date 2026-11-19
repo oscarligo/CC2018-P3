@@ -99,57 +99,90 @@ fn urban_noise(point: Vector3) -> (f32, f32) {
     )
 }
 
+struct Route {
+    normal: Vector3,
+    midpoint: Vector3,
+    end_alignment: f32,
+}
+
+fn routes() -> &'static [Vec<Route>; DISTRICT_COUNT] {
+    static ROUTES: OnceLock<[Vec<Route>; DISTRICT_COUNT]> = OnceLock::new();
+    ROUTES.get_or_init(|| {
+        let hubs = districts();
+        let mut neighbors = [[0; 3]; DISTRICT_COUNT];
+        for (i, hub) in hubs.iter().enumerate() {
+            let mut indices: Vec<_> = (0..DISTRICT_COUNT).filter(|&j| j != i).collect();
+            indices.sort_by(|&a, &b| {
+                hub.center
+                    .dot(hubs[b].center)
+                    .total_cmp(&hub.center.dot(hubs[a].center))
+            });
+            neighbors[i].copy_from_slice(&indices[..3]);
+        }
+        // Cada región consulta solo los arcos que pueden pasar cerca de ella.
+        std::array::from_fn(|region| {
+            let mut local = Vec::new();
+            for (i, nearby) in neighbors.iter().enumerate() {
+                for &j in nearby {
+                    if j < i && neighbors[j].contains(&i) {
+                        continue;
+                    }
+                    let a = hubs[i].center;
+                    let b = hubs[j].center;
+                    let midpoint = (a + b).normalize();
+                    if midpoint.dot(hubs[region].center) > 0.72 {
+                        local.push(Route {
+                            normal: a.cross(b).normalize(),
+                            midpoint,
+                            end_alignment: midpoint.dot(a),
+                        });
+                    }
+                }
+            }
+            local
+        })
+    })
+}
+
 fn city(point: Vector3, districts: &[District; DISTRICT_COUNT]) -> CitySample {
-    let mut closest = &districts[0];
+    let mut index = 0;
     let mut nearest = -2.0_f32;
-    let mut next_nearest = -2.0_f32;
-    for district in districts {
+    for (i, district) in districts.iter().enumerate() {
         let alignment = point.dot(district.center);
         if alignment > nearest {
-            closest = district;
-            next_nearest = nearest;
+            index = i;
             nearest = alignment;
-        } else {
-            next_nearest = next_nearest.max(alignment);
         }
     }
-
-    let x = point.dot(closest.east);
-    let y = point.dot(closest.north);
-    let distance = (x * x + y * y).sqrt();
+    let hub = &districts[index];
+    let distance = (2.0 * (1.0 - nearest).max(0.0)).sqrt();
     let (region, neighborhood) = urban_noise(point);
-    let blocks = value_noise_3d(point * 94.0 + Vector3::new(9.1, 4.7, 2.6));
-    let activity = smoothstep(0.25, 0.75, region * 0.62 + neighborhood * 0.38);
-    let border = nearest - next_nearest;
-    let inside = smoothstep(0.0005, 0.008, border);
-    let hub = (1.0 - smoothstep(0.025, 0.17, distance)) * closest.density * inside;
-
-    // Los tramos más activos enlazan distritos, con vías anulares en los centros densos.
-    let connector = (1.0 - smoothstep(0.0006, 0.0042, border))
-        * smoothstep(0.29, 0.67, neighborhood)
-        * (0.12 + 0.34 * activity);
-    let avenue = 1.0 - smoothstep(0.002, 0.010, x.abs().min(y.abs()));
-    let ring_radius = closest.spacing * 2.5;
-    let ring = (1.0 - smoothstep(0.0016, 0.009, (distance - ring_radius).abs()))
-        * smoothstep(0.48, 0.72, closest.density);
-    let street_distance = |coordinate: f32, spacing: f32| {
-        let lane = coordinate / spacing;
-        (lane - lane.round()).abs()
-    };
-    let street_x = street_distance(x + (neighborhood - 0.5) * EAST_WARP, closest.spacing);
-    let street_y = street_distance(y + (region - 0.5) * NORTH_WARP, closest.north_spacing());
-    let grid = (1.0 - smoothstep(0.035, 0.20, street_x.min(street_y))) * inside;
-
-    let metal = 0.20 + neighborhood * 0.32 + blocks * 0.30 + (1.0 - grid) * 0.18;
-    let streets = connector
-        .max(avenue.max(ring) * inside * (0.10 + 0.38 * activity + 0.44 * hub))
-        .max(grid * (0.05 + 0.48 * activity + 0.35 * hub));
-    let glow = 0.025 + 0.12 * activity + 0.16 * hub;
-    let rooftops = smoothstep(0.53, 0.85, blocks) * (1.0 - grid * 0.65);
+    let grain = value_noise_3d(point * 190.0);
+    let activity = smoothstep(0.32, 0.72, region * 0.60 + neighborhood * 0.40);
+    let radius = 0.045 + 0.125 * smoothstep(0.25, 0.78, hub.density);
+    let stroke = |offset: f32| 1.0 - smoothstep(0.0012, 0.0052, offset.abs());
+    let mut rings = 0.0_f32;
+    for (fraction, strength) in [
+        (0.16, 0.74),
+        (0.38, 0.85),
+        (0.69, 0.62),
+        (0.93, 0.52),
+        (1.0, 1.0),
+    ] {
+        rings = rings.max(strength * stroke(distance - radius * fraction));
+    }
+    let mut avenue = 0.0_f32;
+    for route in &routes()[index] {
+        if point.dot(route.midpoint) >= route.end_alignment {
+            avenue = avenue.max(stroke(point.dot(route.normal)) * 0.74);
+        }
+    }
+    let lamps = smoothstep(0.60, 0.84, grain) * activity;
+    let network = rings.max(avenue) * (0.62 + neighborhood * 0.38);
     CitySample {
-        metal,
-        streets: (streets + glow).min(1.0),
-        rooftops: rooftops * (0.06 + 0.32 * activity + 0.42 * hub) * inside,
+        metal: 0.16 + region * 0.40 + neighborhood * 0.22 + grain * 0.15,
+        streets: (network + lamps * 0.31).min(1.0),
+        rooftops: lamps * 0.13,
     }
 }
 
@@ -210,7 +243,7 @@ fn district_map() -> &'static Vec<CitySample> {
                 let panel = smoothstep(0.025, 0.10, seam) * parcel;
                 sample.metal =
                     (0.32 + 0.52 * sample.metal + 0.24 * panel - 0.16 * curb).clamp(0.0, 1.0);
-                sample.streets = (0.76 * sample.streets + 0.34 * curb).min(1.0);
+                sample.streets = (0.97 * sample.streets + 0.12 * curb).min(1.0);
                 sample.rooftops += 0.11 * panel * smoothstep(0.40, 0.75, neighborhood);
                 samples.push(sample);
             }
