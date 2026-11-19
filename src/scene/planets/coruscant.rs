@@ -1,4 +1,5 @@
 mod architecture;
+pub(super) mod benchmark;
 mod district;
 mod surface;
 

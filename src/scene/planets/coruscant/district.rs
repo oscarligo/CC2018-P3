@@ -2,6 +2,7 @@ use super::{architecture, surface};
 use crate::noise::value_noise_3d;
 use crate::rendering::framebuffer::Framebuffer;
 use crate::rendering::load_objects::Mesh;
+use crate::rendering::projection::projected_sphere_radius;
 use crate::rendering::render::Renderer;
 use crate::rendering::uniforms::Uniforms;
 use crate::scene::world::{TransformAnchor, World, WorldObject, WorldTransform};
@@ -9,6 +10,8 @@ use raylib::prelude::{Matrix, Vector3};
 
 const DISTRICT_SEED: u32 = 0x434F_5255;
 const FOUNDATION_DEPTH: f32 = 8.0;
+const FULL_DETAIL_ENTER_PX: f32 = 108.0;
+const FULL_DETAIL_EXIT_PX: f32 = 88.0;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 enum Building {
@@ -84,6 +87,8 @@ fn placements(site: &surface::District, seed: u32, radius: f32) -> Vec<Placement
 struct SurfaceDistrict {
     transform: WorldTransform,
     geometry: architecture::Architecture,
+    distant_geometry: architecture::Architecture,
+    full_detail: bool,
     bounds: f32,
 }
 
@@ -94,9 +99,10 @@ pub(super) fn register(world: &mut World, parent: TransformAnchor, radius: f32) 
 impl SurfaceDistrict {
     fn attached_to(parent: TransformAnchor, radius: f32) -> Self {
         let site = site();
-        let tower = architecture::tower();
-        let platform = architecture::platform();
+        let tower = [architecture::tower(), architecture::distant_tower()];
+        let platform = [architecture::platform(), architecture::distant_platform()];
         let mut geometry = architecture::Architecture::empty();
+        let mut distant_geometry = architecture::Architecture::empty();
 
         // Las posiciones se calculan en el espacio local del planeta, antes de agrupar las mallas.
         for placement in placements(site, DISTRICT_SEED, radius) {
@@ -104,7 +110,7 @@ impl SurfaceDistrict {
             let forward = site.east.cross(up).normalize();
             let right = up.cross(forward);
             let origin = (up - site.center) * radius;
-            let model = match placement.kind {
+            let models = match placement.kind {
                 Building::Tower => &tower,
                 Building::Platform => &platform,
             };
@@ -125,20 +131,27 @@ impl SurfaceDistrict {
                     + forward * direction.z)
                     .normalize()
             };
-            append(&mut geometry.shell, &model.shell, place, normal, 1.0);
-            append(
-                &mut geometry.lights,
-                &model.lights,
-                place,
-                normal,
-                placement.brightness,
-            );
+            for (batch, model) in [&mut geometry, &mut distant_geometry]
+                .into_iter()
+                .zip(models)
+            {
+                append(&mut batch.shell, &model.shell, place, normal, 1.0);
+                append(
+                    &mut batch.lights,
+                    &model.lights,
+                    place,
+                    normal,
+                    placement.brightness,
+                );
+            }
         }
         let bounds = geometry
             .shell
             .vertices
             .iter()
             .chain(&geometry.lights.vertices)
+            .chain(&distant_geometry.shell.vertices)
+            .chain(&distant_geometry.lights.vertices)
             .map(|vertex| vertex.position.length())
             .fold(0.0, f32::max);
 
@@ -147,6 +160,8 @@ impl SurfaceDistrict {
         Self {
             transform,
             geometry,
+            distant_geometry,
+            full_detail: false,
             bounds,
         }
     }
@@ -194,6 +209,33 @@ impl WorldObject for SurfaceDistrict {
         uniforms: &Uniforms,
     ) {
         let transform = &self.transform;
+        let scale = transform
+            .scale
+            .x
+            .abs()
+            .max(transform.scale.y.abs())
+            .max(transform.scale.z.abs());
+        let projected = projected_sphere_radius(
+            transform.position,
+            self.bounds * scale,
+            uniforms,
+            framebuffer.height,
+        );
+        let threshold = if self.full_detail {
+            FULL_DETAIL_EXIT_PX
+        } else {
+            FULL_DETAIL_ENTER_PX
+        };
+        let full_detail = projected >= threshold;
+        if full_detail != self.full_detail {
+            renderer.record_lod_switch();
+            self.full_detail = full_detail;
+        }
+        let geometry = if full_detail {
+            &self.geometry
+        } else {
+            &self.distant_geometry
+        };
         let uniforms = Uniforms {
             model_matrix: Matrix::scale(transform.scale.x, transform.scale.y, transform.scale.z)
                 * transform.rotation.to_matrix()
@@ -204,8 +246,8 @@ impl WorldObject for SurfaceDistrict {
                 ),
             ..*uniforms
         };
-        renderer.render_lit(framebuffer, &uniforms, &self.geometry.shell);
-        renderer.render(framebuffer, &uniforms, &self.geometry.lights);
+        renderer.render_lit(framebuffer, &uniforms, &geometry.shell);
+        renderer.render(framebuffer, &uniforms, &geometry.lights);
     }
 }
 

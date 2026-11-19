@@ -277,19 +277,31 @@ fn sample_grid(samples: &[CitySample], u: f32, v: f32) -> CitySample {
     top.blend(bottom, v)
 }
 
-pub(super) fn shade(point: Vector3, normal: Vector3, _time: f32, light: Vector3) -> Vector3 {
+#[inline]
+fn dot(a: Vector3, b: Vector3) -> f32 {
+    a.x * b.x + a.y * b.y + a.z * b.z
+}
+
+fn sample_surface(point: Vector3) -> CitySample {
     let site = super::district::site();
-    let mut city = sample_city(point);
-    if point.dot(site.center) > 0.94 {
-        let u = point.dot(site.east) / DISTRICT_EXTENT;
-        let v = point.dot(site.north) / DISTRICT_EXTENT;
+    if dot(point, site.center) > 0.94 {
+        let u = dot(point, site.east) / DISTRICT_EXTENT;
+        let v = dot(point, site.north) / DISTRICT_EXTENT;
         let extent = u.abs().max(v.abs());
         if extent < 1.0 {
             let local = sample_grid(district_map(), u, v);
-            city = local.blend(city, smoothstep(0.82, 1.0, extent));
+            if extent <= 0.82 {
+                return local;
+            }
+            return local.blend(sample_city(point), smoothstep(0.82, 1.0, extent));
         }
     }
-    let sun = normal.x * light.x + normal.y * light.y + normal.z * light.z;
+    sample_city(point)
+}
+
+pub(super) fn shade(point: Vector3, normal: Vector3, _time: f32, light: Vector3) -> Vector3 {
+    let city = sample_surface(point);
+    let sun = dot(normal, light);
     let daylight = sun.max(0.0);
     let night = 1.0 - smoothstep(-0.12, 0.40, sun);
     let metal = 0.10 + city.metal * (0.44 + daylight * 0.90);

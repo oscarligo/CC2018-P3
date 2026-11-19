@@ -123,6 +123,43 @@ pub(super) fn platform() -> Architecture {
     model
 }
 
+pub(super) fn distant_tower() -> Architecture {
+    let mut model = Architecture::empty();
+    profile(
+        &mut model.shell,
+        Vector3::zero(),
+        &[
+            (-1.0, 0.46, 0.39),
+            (0.24, 0.38, 0.33),
+            (0.58, 0.35, 0.30),
+            (0.65, 0.24, 0.22),
+            (1.13, 0.025, 0.025),
+        ],
+        Vector3::new(0.40, 0.46, 0.53),
+    );
+    facade_lights(&mut model.lights, 0.58, 0.015, 0.35, 0.30, BLUE);
+    model
+}
+
+pub(super) fn distant_platform() -> Architecture {
+    let mut model = Architecture::empty();
+    let origin = Vector3::zero();
+    profile(
+        &mut model.shell,
+        origin,
+        &[(-1.0, 0.23, 0.19), (0.75, 0.23, 0.19)],
+        Vector3::new(0.33, 0.39, 0.46),
+    );
+    profile(
+        &mut model.shell,
+        origin,
+        &[(0.72, 0.50, 0.46), (0.90, 0.50, 0.46), (0.94, 0.44, 0.40)],
+        Vector3::new(0.50, 0.55, 0.59),
+    );
+    facade_lights(&mut model.lights, 0.81, 0.030, 0.50, 0.46, BLUE);
+    model
+}
+
 fn profile(mesh: &mut Mesh, origin: Vector3, levels: &[(f32, f32, f32)], color: Vector3) {
     let ring = |(height, x, z): (f32, f32, f32)| {
         let bevel = x.min(z) * 0.28;

@@ -28,6 +28,14 @@ const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--benchmark-coruscant") {
+        let captures = std::env::args().any(|arg| arg == "--capturas");
+        if let Err(error) = scene::planets::benchmark_coruscant(captures) {
+            eprintln!("No se pudo medir Coruscant: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
     if std::env::args().any(|arg| arg == "--benchmark-kashyyyk") {
         let captures = std::env::args().any(|arg| arg == "--capturas");
         if let Err(error) = scene::planets::benchmark_kashyyyk(captures) {
