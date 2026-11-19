@@ -135,6 +135,9 @@ fn surface_normalize(v: Vector3) -> Vector3 {
 }
 
 pub struct CelestialBody {
+    tidal_center: Option<Vector3>,
+    volume_shader: Option<SurfaceShader>,
+    volume_cache: super::volume::VolumeCache,
     name: Option<&'static str>,
     inspection: Option<Interaction>,
     fragment_surface: Option<SurfaceShader>,
@@ -157,6 +160,21 @@ pub struct CelestialBody {
 }
 
 impl CelestialBody {
+    /// Keep local +X on the star: no solar day, while preserving the orbital motion.
+    pub(crate) fn tidally_locked(mut self, center: Vector3) -> Self {
+        self.tidal_center = Some(center);
+        self.transform
+            .set_local_rotation(Quaternion::from_vector3_to_vector3(
+                Vector3::new(1., 0., 0.),
+                (center - self.transform.position).normalize(),
+            ));
+        self
+    }
+    /// Analytic volume compositor: local surface point, local viewing ray, time, local light.
+    pub(crate) fn with_volume_shader(mut self, shader: SurfaceShader) -> Self {
+        self.volume_shader = Some(shader);
+        self
+    }
     pub fn named(mut self, name: &'static str) -> Self {
         self.name = Some(name);
         self.inspection = super::inspections::named(name);
@@ -251,6 +269,9 @@ impl CelestialBody {
         let shape = BodyShape::Sphere;
         let mesh = body_mesh(lod, shape);
         let mut body = Self {
+            tidal_center: None,
+            volume_shader: None,
+            volume_cache: super::volume::VolumeCache::default(),
             name: None,
             inspection: None,
             fragment_surface: None,
@@ -387,7 +408,7 @@ impl CelestialBody {
     }
 
     fn update_surface_if_needed(&mut self) -> bool {
-        if self.fragment_surface.is_some() {
+        if self.fragment_surface.is_some() || self.volume_shader.is_some() {
             return false;
         }
         if !self.surface_dirty && self.surface_elapsed < self.surface_update_interval() {
@@ -430,11 +451,15 @@ impl WorldObject for CelestialBody {
     fn update(&mut self, update: &WorldUpdate) {
         self.time += update.frame_time * self.style.animation_speed;
         self.rotation = (self.rotation + self.style.rotation_speed * update.frame_time) % TAU;
-        self.transform
-            .set_local_rotation(Quaternion::from_axis_angle(
-                Vector3::new(0.0, 1.0, 0.0),
-                self.rotation,
-            ));
+        let orientation = if let Some(center) = self.tidal_center {
+            Quaternion::from_vector3_to_vector3(
+                Vector3::new(1., 0., 0.),
+                (center - self.transform.position).normalize(),
+            )
+        } else {
+            Quaternion::from_axis_angle(Vector3::new(0.0, 1.0, 0.0), self.rotation)
+        };
+        self.transform.set_local_rotation(orientation);
         self.surface_elapsed += update.frame_time;
         self.advance_lod_transition(update.frame_time);
     }
@@ -519,7 +544,36 @@ impl WorldObject for CelestialBody {
         } else {
             body_mesh(self.lod, self.shape)
         };
-        if let Some(shader) = self.fragment_surface {
+        if let Some(shader) = self.volume_shader {
+            let inverse = self.transform.rotation.invert().to_matrix();
+            let rotate = |v: Vector3| {
+                Vector3::new(
+                    inverse.m0 * v.x + inverse.m4 * v.y + inverse.m8 * v.z,
+                    inverse.m1 * v.x + inverse.m5 * v.y + inverse.m9 * v.z,
+                    inverse.m2 * v.x + inverse.m6 * v.y + inverse.m10 * v.z,
+                )
+            };
+            let camera = rotate(uniforms.camera_pos - self.transform.position)
+                * (1.0 / self.transform.scale.x);
+            let light = rotate(self.light_direction);
+            let size = if projected_sphere_radius(
+                self.transform.position,
+                self.transform.scale.x,
+                uniforms,
+                framebuffer.height,
+            ) > 270.
+            {
+                256
+            } else {
+                192
+            };
+            self.volume_cache
+                .prepare(camera, light, self.time, size, shader);
+            renderer.render_surface(framebuffer, &body_uniforms, mesh, |surface| {
+                self.volume_cache
+                    .sample(surface_normalize(surface.position))
+            });
+        } else if let Some(shader) = self.fragment_surface {
             let rotation = self.transform.rotation.to_matrix();
             renderer.render_surface(framebuffer, &body_uniforms, mesh, |surface| {
                 let normal = surface_normalize(surface.normal);

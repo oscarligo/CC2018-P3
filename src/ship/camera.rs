@@ -74,9 +74,9 @@ impl FollowCamera {
         let desired_distance = (self.distance * distance_multiplier)
             .clamp(self.min_distance * 0.85, self.max_distance * 1.3);
         self.effective_distance +=
-            (desired_distance - self.effective_distance) * (5.0 * frame_time).min(1.0);
+            (desired_distance - self.effective_distance) * (1.0 - (-5.0 * frame_time).exp());
 
-        let follow_blend = (FOLLOW_STIFFNESS * frame_time).min(1.0);
+        let follow_blend = 1.0 - (-FOLLOW_STIFFNESS * frame_time).exp();
         self.orientation = self
             .orientation
             .slerp(target_orientation, follow_blend)

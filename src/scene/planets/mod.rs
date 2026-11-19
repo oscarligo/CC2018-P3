@@ -1,4 +1,5 @@
 mod coruscant;
+pub(crate) mod exploration;
 mod kashyyyk;
 
 use crate::scene::world::World;

@@ -73,9 +73,9 @@ pub(super) fn catalog(index: usize) -> Interaction {
             "Un satélite de tonos fríos envuelto en un borde azul. Su vuelta alrededor de la Supertierra ofrece una segunda perspectiva de los anillos."
         ),
         12 => card!(
-            "Mundo Amatista",
-            "El sueño violeta",
-            "Relieve irregular, rocas y una atmósfera púrpura dibujan un paisaje de cristal. La luz convierte sus tonos violetas en una pequeña gema suspendida."
+            "Ureski",
+            "La primavera que nunca termina",
+            "Un rostro desértico mira siempre al sol; el opuesto duerme bajo una tundra azul. Entre ambos, un cinturón de primavera perpetua alberga copas escalonadas, helechos luminosos, saltarines de antenas doradas y mantas que revolotean. Ureski está sincronizado con su estrella: aquí el atardecer es un lugar, no una hora."
         ),
         13 => card!(
             "Planeta Árido",
@@ -148,14 +148,14 @@ pub(super) fn catalog(index: usize) -> Interaction {
             "Gira y orbita en sentido retrógrado alrededor del Gigante Cobalto. Mientras las demás parecen seguir un acuerdo secreto, ella toma su propio camino."
         ),
         27 => card!(
-            "Helado Exterior",
-            "El último rubor",
-            "Pequeño, de tonos suaves y atmósfera tenue, conserva un brillo rosado en los confines del sistema. La Luna Gemela nunca se aleja demasiado."
+            "Alfa Riddertal",
+            "El archivo que devuelve la mirada",
+            "Nubes rosadas velan una entidad de apariciones superpuestas y ojos imposibles. Seis estaciones consultan su memoria infinita: los pulsos cian llevan preguntas y los rosados devuelven ecos del pasado humano. El núcleo cambia al observarlo. Nadie sabe si recuerda nuestra historia o si la está soñando."
         ),
         28 => card!(
             "Luna Gemela",
             "La compañera del confín",
-            "Un satélite rocoso y gris acompaña de cerca al Helado Exterior. Juntos forman una pareja discreta, lejos del resplandor central."
+            "Una luna gris custodia el archivo rosado de Alfa Riddertal, por fuera de sus estaciones de enlace. Algunos exploradores dicen que es la única cosa cercana al planeta que nunca responde a una pregunta."
         ),
         29 => card!(
             "Gigante Lejano",
