@@ -341,6 +341,9 @@ pub enum RenderPass {
 
 // The `WorldObject` trait defines the interface for objects that can be updated and drawn in the world. Each object must implement the `update` method to handle state changes based on the provided `WorldUpdate`, and the `draw` method to render itself onto the framebuffer using the given uniforms.
 pub trait WorldObject {
+    fn travel_name(&self) -> Option<&'static str> {
+        None
+    }
     fn transform(&self) -> &WorldTransform;
     fn transform_mut(&mut self) -> &mut WorldTransform;
     fn update(&mut self, _update: &WorldUpdate) {}
@@ -376,7 +379,84 @@ pub struct World {
     next_object_id: u64,
 }
 
+#[derive(Clone, Copy, Debug)]
+pub struct TravelTarget {
+    pub name: &'static str,
+    pub position: Vector3,
+    pub radius: f32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct BodyImpact {
+    pub fraction: f32,
+    pub normal: Vector3,
+    pub safe_position: Vector3,
+}
+
 impl World {
+    pub(crate) fn primary_light_bounds(&self) -> Option<(Vector3, f32)> {
+        self.objects.iter().find_map(|entry| {
+            entry.object.light_position()?;
+            collider_sphere(entry.object.as_ref())
+        })
+    }
+    /// Sweep the complete vehicle volume, rather than just testing its end position.
+    pub fn sweep_vehicle(
+        &self,
+        start: Vector3,
+        delta: Vector3,
+        vehicle_radius: f32,
+    ) -> Option<BodyImpact> {
+        let length = delta.length();
+        self.objects
+            .iter()
+            .filter_map(|entry| {
+                let (center, radius) = collider_sphere(entry.object.as_ref())?;
+                let combined = radius + vehicle_radius;
+                let offset = start - center;
+                let skin = (vehicle_radius * 0.015).max(0.05);
+                let fraction = if offset.length_sqr() < (combined + skin * 0.25).powi(2) {
+                    0.0
+                } else {
+                    let ray = Ray::new(start, delta)?;
+                    raycast_sphere(ray, center, combined, length)? / length
+                };
+                let contact = start + delta * fraction;
+                let radial = contact - center;
+                let normal = if radial.length_sqr() > 0.0001 {
+                    radial.normalize()
+                } else if length > 0.001 {
+                    -delta * (1.0 / length)
+                } else {
+                    Vector3::new(0., 1., 0.)
+                };
+                Some(BodyImpact {
+                    fraction,
+                    normal,
+                    safe_position: center + normal * (combined + skin),
+                })
+            })
+            .min_by(|a, b| a.fraction.total_cmp(&b.fraction))
+    }
+    /// Resolve positions every frame: orbiting destinations must never use stale coordinates.
+    pub fn travel_targets(&self) -> Vec<TravelTarget> {
+        let mut targets: Vec<_> = self
+            .objects
+            .iter()
+            .filter_map(|entry| {
+                let name = entry.object.travel_name()?;
+                let (position, radius) = collider_sphere(entry.object.as_ref())?;
+                Some(TravelTarget {
+                    name,
+                    position,
+                    radius,
+                })
+            })
+            .collect();
+        // Rendering sorts objects by distance. Keep menu indices stable during flight.
+        targets.sort_by_key(|target| target.name);
+        targets
+    }
     pub fn new() -> Self {
         Self::default()
     }

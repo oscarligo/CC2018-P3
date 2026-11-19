@@ -42,6 +42,7 @@ fn register_with_lod(world: &mut World, lod: bool) {
             ..CelestialStyle::default()
         },
     )
+    .named("Kashyyyk")
     .with_fragment_shader(surface::shade)
     .with_scale(RADIUS)
     .with_orbit(Orbit::new(

@@ -3,7 +3,7 @@ use crate::rendering::uniforms::Uniforms;
 use crate::scene::world::World;
 
 const MAX_INTERACTION_DISTANCE: f32 = 1_200.0;
-const FEEDBACK_SECONDS: f32 = 2.5;
+const FEEDBACK_SECONDS: f32 = 8.0;
 
 #[derive(Clone, Copy)]
 pub struct Interaction {

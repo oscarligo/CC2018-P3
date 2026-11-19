@@ -7,14 +7,22 @@ use raylib::prelude::Vector3;
 pub mod atmosphere;
 mod catalog;
 pub mod celestial;
+pub(crate) mod dyson;
+mod inspections;
 pub mod ring;
 pub mod rock;
 
 /// Register all objects in the world.
 pub fn register_all(world: &mut World) {
     let mut anchors: Vec<TransformAnchor> = Vec::new();
-    for definition in catalog::solar_system_definitions() {
-        register_body(world, definition, &mut anchors);
+    for (index, definition) in catalog::solar_system_definitions().into_iter().enumerate() {
+        register_body(
+            world,
+            definition,
+            &mut anchors,
+            catalog::travel_name(index),
+            inspections::catalog(index),
+        );
     }
 }
 
@@ -22,6 +30,8 @@ fn register_body(
     world: &mut World,
     definition: BodyDefinition,
     anchors: &mut Vec<TransformAnchor>,
+    name: Option<&'static str>,
+    inspection: crate::interaction::Interaction,
 ) {
     let role = if matches!(&definition.motion, MotionDefinition::ParentOrbit { .. }) {
         BodyRole::Moon
@@ -40,6 +50,10 @@ fn register_body(
     .with_shape(definition.shape)
     .with_role(role)
     .with_scale(definition.scale);
+    if let Some(name) = name {
+        body = body.named(name);
+    }
+    body = body.with_inspection(inspection);
     if let Some(path) = definition.model_path {
         body = body
             .with_obj_model(path)

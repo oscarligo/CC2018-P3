@@ -6,6 +6,28 @@ pub(super) const BODY_SCALE: f32 = 165.0;
 // Multiplicador global de distancia orbital (1.0 = normal, 0.5 = más juntos, 2.0 = más separados)
 pub(super) const ORBIT_SPREAD: f32 = 1.0;
 
+pub(super) fn travel_name(index: usize) -> Option<&'static str> {
+    Some(match index {
+        1 => "Protoplaneta",
+        2 => "Magmatico",
+        3 => "Invernadero",
+        4 => "Oceanico",
+        6 => "Desierto con anillo",
+        9 => "Planeta enano",
+        10 => "Supertierra",
+        12 => "Mundo Amatista",
+        13 => "Planeta Arido",
+        14 => "Coloso Joviano",
+        18 => "Gigante Anillado Imperial",
+        21 => "Enana Marron",
+        23 => "Gigante Cian",
+        25 => "Gigante Cobalto",
+        27 => "Helado Exterior",
+        29 => "Gigante Lejano",
+        _ => return None,
+    })
+}
+
 pub(super) struct BodyDefinition {
     pub kind: CelestialKind,
     pub model_path: Option<&'static str>,
