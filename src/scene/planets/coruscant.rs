@@ -1,3 +1,5 @@
+mod surface;
+
 use crate::celestial_shaders::{CelestialKind, CelestialStyle};
 use crate::objects::celestial::CelestialBody;
 use crate::scene::world::{Orbit, World};
@@ -17,6 +19,7 @@ pub(super) fn registrar(world: &mut World) {
     let sun_position = world
         .primary_light_position()
         .expect("Coruscant requiere registrar primero el sol del sistema");
+    surface::prepare();
     let position = sun_position + INITIAL_OFFSET;
     let planet = CelestialBody::styled(
         CelestialKind::Rocky,
@@ -33,18 +36,7 @@ pub(super) fn registrar(world: &mut World) {
         Vector3::new(0.0, 1.0, 0.0),
         ORBITAL_SPEED,
     ))
-    .with_fragment_shader(shade_placeholder);
+    .with_fragment_shader(surface::shade);
 
     world.add(planet);
-}
-
-fn shade_placeholder(point: Vector3, normal: Vector3, _time: f32, light: Vector3) -> Vector3 {
-    let daylight = normal.dot(light).max(0.0);
-    let surface = Vector3::new(0.16, 0.22, 0.32) * (0.32 + 0.68 * daylight);
-
-    // La marca temporal usa coordenadas locales para que se vea girar con el planeta.
-    let marker_direction = Vector3::new(-0.48, 0.16, -0.86);
-    let marker = ((point.dot(marker_direction) - 0.97) / 0.012).clamp(0.0, 1.0);
-    let amber = Vector3::new(0.96, 0.63, 0.27);
-    surface + (amber - surface) * marker
 }
