@@ -32,6 +32,7 @@ pub(super) fn registrar(world: &mut World) {
             ..CelestialStyle::default()
         },
     )
+    .named("Coruscant")
     .with_scale(RADIUS)
     .with_orbit(Orbit::new(
         sun_position,

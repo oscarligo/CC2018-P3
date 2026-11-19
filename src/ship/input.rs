@@ -17,7 +17,12 @@ const INTERACT_KEY: KeyboardKey = KeyboardKey::KEY_F;
 
 const ORBIT_BUTTON: MouseButton = MouseButton::MOUSE_BUTTON_RIGHT;
 
+#[derive(Default)]
 pub struct InputState {
+    pub spin_pressed: bool,
+    pub spin_held: bool,
+    pub firing: bool,
+    pub mouse_position: Vector2,
     pub pitch_up: bool,
     pub pitch_down: bool,
     pub turn_left: bool,
@@ -41,6 +46,10 @@ impl InputState {
         let orbiting = window.is_mouse_button_down(ORBIT_BUTTON);
 
         Self {
+            spin_pressed: window.is_key_pressed(KeyboardKey::KEY_R),
+            spin_held: window.is_key_down(KeyboardKey::KEY_R),
+            firing: window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT),
+            mouse_position: window.get_mouse_position(),
             pitch_up: window.is_key_down(PITCH_UP_KEY),
             pitch_down: window.is_key_down(PITCH_DOWN_KEY),
             turn_left: window.is_key_down(TURN_LEFT_KEY),
@@ -55,5 +64,9 @@ impl InputState {
             orbiting,
             zoom_delta: window.get_mouse_wheel_move(),
         }
+    }
+
+    pub fn for_vehicle(window: &RaylibHandle, _saucer: bool) -> Self {
+        Self::read(window)
     }
 }

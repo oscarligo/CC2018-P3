@@ -55,6 +55,19 @@ impl Framebuffer {
         self.blend_point(x, y, depth, color, 1.0, true);
     }
 
+    /// Emissive sprites and laser bloom add light without covering the scene with black quads.
+    pub fn add_light(&mut self, x: i32, y: i32, depth: f32, color: Vector3, strength: f32) {
+        if strength <= 0.0 || !self.is_closer(x, y, depth) {
+            return;
+        }
+        let index = (y as usize * self.width as usize + x as usize) * CHANNELS_PER_PIXEL;
+        let pixel = &mut self.pixels[index..index + CHANNELS_PER_PIXEL];
+        for (channel, value) in [color.x, color.y, color.z].into_iter().enumerate() {
+            pixel[channel] =
+                (pixel[channel] as f32 + value.max(0.0) * strength * 255.0).min(255.0) as u8;
+        }
+    }
+
     pub fn blend_point(
         &mut self,
         x: i32,
@@ -110,6 +123,27 @@ impl Framebuffer {
         raylib_thread: &RaylibThread,
         overlay: Option<&str>,
     ) {
+        self.present(window, raylib_thread, overlay, |_| {});
+    }
+
+    pub fn present(
+        &mut self,
+        window: &mut RaylibHandle,
+        raylib_thread: &RaylibThread,
+        overlay: Option<&str>,
+        draw_ui: impl FnOnce(&mut RaylibDrawHandle),
+    ) {
+        self.present_with_overlay_bottom(window, raylib_thread, overlay, 14, draw_ui);
+    }
+
+    pub fn present_with_overlay_bottom(
+        &mut self,
+        window: &mut RaylibHandle,
+        raylib_thread: &RaylibThread,
+        overlay: Option<&str>,
+        bottom_margin: i32,
+        draw_ui: impl FnOnce(&mut RaylibDrawHandle),
+    ) {
         if self.texture.is_none() {
             let image = Image::gen_image_color(
                 self.width as i32,
@@ -125,29 +159,108 @@ impl Framebuffer {
             return;
         }
 
-        const OVERLAY_FONT_SIZE: i32 = 20;
-        let overlay_width = overlay.map(|text| window.measure_text(text, OVERLAY_FONT_SIZE));
+        const OVERLAY_FONT_SIZE: i32 = 18;
+        let overlay_lines = overlay.map(|text| {
+            wrap_overlay(text, self.width as i32 - 64, |s| {
+                window.measure_text(s, OVERLAY_FONT_SIZE)
+            })
+        });
+        let overlay_width = overlay_lines.as_ref().map(|lines| {
+            lines
+                .iter()
+                .map(|s| window.measure_text(s, OVERLAY_FONT_SIZE))
+                .max()
+                .unwrap_or(0)
+        });
         let mut renderer = window.begin_drawing(raylib_thread);
         renderer.draw_texture(texture, 0, 0, Color::WHITE);
-        if let Some((text, width)) = overlay.zip(overlay_width) {
-            const PADDING: i32 = 8;
+        if let Some((lines, width)) = overlay_lines.zip(overlay_width) {
+            const PADDING: i32 = 14;
             let x = (self.width as i32 - width) / 2;
-            let y = self.height as i32 - OVERLAY_FONT_SIZE - PADDING * 2;
+            let height = lines.len() as i32 * 24 + PADDING * 2;
+            let y = self.height as i32 - height - bottom_margin;
             renderer.draw_rectangle(
                 x - PADDING,
-                y - PADDING,
+                y,
                 width + PADDING * 2,
-                OVERLAY_FONT_SIZE + PADDING * 2,
-                Color::new(0, 0, 0, 180),
+                height,
+                Color::new(7, 18, 36, 235),
             );
-            renderer.draw_text(text, x, y, OVERLAY_FONT_SIZE, Color::RAYWHITE);
+            renderer.draw_rectangle_lines(
+                x - PADDING,
+                y,
+                width + PADDING * 2,
+                height,
+                Color::new(85, 142, 199, 220),
+            );
+            for (i, line) in lines.iter().enumerate() {
+                let color = if i == 0 && lines.len() > 1 {
+                    Color::new(135, 205, 255, 255)
+                } else {
+                    Color::RAYWHITE
+                };
+                renderer.draw_text(
+                    line,
+                    x,
+                    y + PADDING + i as i32 * 24,
+                    OVERLAY_FONT_SIZE,
+                    color,
+                );
+            }
         }
+        draw_ui(&mut renderer);
     }
+}
+
+fn wrap_overlay(text: &str, max_width: i32, measure: impl Fn(&str) -> i32) -> Vec<String> {
+    let mut lines = Vec::new();
+    for paragraph in text.split('\n') {
+        let mut line = String::new();
+        for word in paragraph.split_whitespace() {
+            let candidate = if line.is_empty() {
+                word.to_owned()
+            } else {
+                format!("{line} {word}")
+            };
+            if !line.is_empty() && measure(&candidate) > max_width {
+                lines.push(line);
+                line = word.to_owned();
+            } else {
+                line = candidate;
+            }
+        }
+        lines.push(line);
+    }
+    lines
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inspection_layout_preserves_the_title_and_wraps_without_losing_words() {
+        let lines = wrap_overlay(
+            "Mundo Amatista\nRelieve violeta entre rocas y nubes",
+            16,
+            |s| s.chars().count() as i32,
+        );
+        assert_eq!(lines[0], "Mundo Amatista");
+        assert!(lines.iter().all(|s| s.chars().count() <= 16));
+        assert_eq!(lines[1..].join(" "), "Relieve violeta entre rocas y nubes");
+    }
+
+    #[test]
+    fn emitted_light_adds_color_respects_depth_and_does_not_occlude() {
+        let mut fb = Framebuffer::new(1, 1, Color::BLACK);
+        fb.point(0, 0, 2.0, Vector3::new(0.2, 0.2, 0.2));
+        fb.add_light(0, 0, 1.0, Vector3::new(0., 1., 0.), 0.8);
+        assert_eq!(&fb.pixels[..4], &[51, 255, 51, 255]);
+        fb.add_light(0, 0, 3.0, Vector3::new(1., 0., 0.), 1.0);
+        assert_eq!(&fb.pixels[..4], &[51, 255, 51, 255]);
+        fb.point(0, 0, 1.5, Vector3::new(0., 0., 1.));
+        assert_eq!(&fb.pixels[..4], &[0, 0, 255, 255]);
+    }
 
     #[test]
     fn clear_reuses_pixel_storage() {

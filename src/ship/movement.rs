@@ -21,10 +21,17 @@ const BRAKE_DECEL_FACTOR: f32 = 2.4;
 const MOVEMENT_THRESHOLD: f32 = 0.01;
 
 pub struct ShipMovement {
+    pub alien: Option<super::alien::AlienFlight>,
     model_center: Vector3,
     target: Vector3,
     camera: FollowCamera,
     effects: ShipEffects,
+    impact: super::impact::ImpactEffects,
+    radius: f32,
+    muzzle_local: Option<Vector3>,
+    recoil: Vector3,
+    impact_cooldown: f32,
+    clock: f32,
     ship_pitch: f32,
     ship_yaw: f32,
     ship_roll: f32,
@@ -39,6 +46,62 @@ pub struct ShipMovement {
 }
 
 impl ShipMovement {
+    pub fn configure_vehicle(&mut self, base_radius: f32, acceleration_duration: f32, alien: bool) {
+        let multiplier = if alien { 3.0 } else { 1.0 };
+        self.max_speed = base_radius * MAX_SPEED_FACTOR * multiplier;
+        self.acceleration = self.max_speed / acceleration_duration.max(MIN_ACCELERATION_DURATION);
+        self.deceleration = self.max_speed * SPACE_DRAG_DECEL_FACTOR;
+        self.brake_deceleration = self.max_speed * BRAKE_DECEL_FACTOR;
+        self.effects.set_alien(alien);
+        self.alien = alien.then(|| super::alien::AlienFlight::new(base_radius));
+    }
+
+    /// Arrive outside the surface and rings, stopped and facing the destination.
+    pub fn teleport(
+        &mut self,
+        destination: &crate::scene::world::TravelTarget,
+        world: &crate::scene::world::World,
+    ) -> bool {
+        let clearance = (self.camera.reference_distance() * 4.0).max(90.0);
+        let mut arrival = None;
+        let mut overlaps = Vec::new();
+        for attempt in 0..64 {
+            let angle = attempt as f32 * 2.399963;
+            let direction = Vector3::new(angle.sin() + 0.42, 0.28, -angle.cos()).normalize();
+            let distance = destination.radius * (3.6 + (attempt / 16) as f32 * 0.8) + clearance;
+            let position = destination.position + direction * distance;
+            world.query_sphere(
+                position,
+                self.camera.reference_distance() * 1.5,
+                &mut overlaps,
+            );
+            if overlaps.is_empty() {
+                arrival = Some((position, direction));
+                break;
+            }
+        }
+        let Some((position, direction)) = arrival else {
+            return false;
+        };
+        self.target = position;
+        self.orientation =
+            Quaternion::from_vector3_to_vector3(Vector3::new(0., 0., 1.), -direction);
+        self.speed = 0.0;
+        self.pitch_rate = 0.0;
+        self.yaw_rate = 0.0;
+        self.ship_pitch = 0.0;
+        self.ship_yaw = 0.0;
+        self.ship_roll = 0.0;
+        self.camera.snap(self.orientation);
+        self.effects.clear();
+        self.impact.clear();
+        self.recoil = Vector3::zero();
+        self.impact_cooldown = 0.0;
+        if let Some(alien) = &mut self.alien {
+            alien.reset();
+        }
+        true
+    }
     pub fn new(mesh: &Mesh, acceleration_duration: f32) -> Self {
         let (min, max) = mesh.vertices.iter().fold(
             (
@@ -84,10 +147,17 @@ impl ShipMovement {
         let max_speed = radius * MAX_SPEED_FACTOR;
 
         Self {
+            alien: None,
             model_center: target,
             target,
             camera: FollowCamera::new(radius),
             effects: ShipEffects::new([left_wing, right_wing], rear_point, radius),
+            impact: super::impact::ImpactEffects::default(),
+            radius,
+            muzzle_local: None,
+            recoil: Vector3::zero(),
+            impact_cooldown: 0.0,
+            clock: 0.0,
             ship_pitch: 0.0,
             ship_yaw: 0.0,
             ship_roll: 0.0,
@@ -102,21 +172,104 @@ impl ShipMovement {
         }
     }
 
-    pub fn update(&mut self, input: &InputState, frame_time: f32, uniforms: &mut Uniforms) {
-        self.update_navigation(input, frame_time);
+    pub fn command(&mut self, command: super::commands::Command) {
+        if let Some(alien) = &mut self.alien {
+            alien.command(command, self.orientation);
+            if command == super::commands::Command::Chase {
+                self.speed = self
+                    .speed
+                    .clamp(0.0, self.max_speed * BOOST_SPEED_MULTIPLIER);
+            }
+        }
+    }
+
+    pub fn set_muzzle(&mut self, point: Option<Vector3>) {
+        self.muzzle_local = point;
+    }
+
+    pub fn update(
+        &mut self,
+        input: &InputState,
+        frame_time: f32,
+        uniforms: &mut Uniforms,
+        world: &crate::scene::world::World,
+    ) {
+        self.clock += frame_time;
+        self.impact.update(frame_time);
+        self.impact_cooldown = (self.impact_cooldown - frame_time).max(0.0);
+        let drive = self.alien.as_mut().and_then(|alien| {
+            alien.update(
+                input,
+                frame_time,
+                self.target,
+                self.orientation,
+                self.max_speed,
+                uniforms,
+                world,
+            )
+        });
+        if self.alien.as_ref().is_some_and(|a| a.just_finished()) {
+            self.speed = self
+                .speed
+                .clamp(0., self.max_speed * BOOST_SPEED_MULTIPLIER);
+        }
+        if let Some(drive) = &drive {
+            let desired =
+                Quaternion::from_vector3_to_vector3(Vector3::new(0., 0., 1.), drive.direction);
+            self.orientation = self
+                .orientation
+                .slerp(desired, 1. - (-drive.steering * frame_time).exp())
+                .normalize();
+            self.speed = move_towards(
+                self.speed,
+                self.max_speed * drive.speed_factor,
+                self.max_speed * 32. * frame_time,
+            );
+        } else {
+            self.update_navigation(input, frame_time);
+            self.update_motion(input.thrust, input.boost, input.braking, frame_time);
+        }
         self.update_ship(input, frame_time);
-        self.update_motion(input.thrust, input.boost, input.braking, frame_time);
-        self.target += self.world_velocity() * frame_time;
+        self.advance_with_collisions(frame_time, world);
         self.camera
             .update(input, frame_time, self.target, self.orientation, uniforms);
+        uniforms.camera_pos +=
+            Vector3::new((self.clock * 79.0).sin(), (self.clock * 57.0).cos(), 0.0)
+                * self.radius
+                * 0.045
+                * self.impact.shake;
         self.apply_model(uniforms);
+        if frame_time > 0.0
+            && let Some(alien) = &mut self.alien
+        {
+            let local = self.muzzle_local.unwrap_or(
+                self.model_center
+                    + Vector3::new(self.radius * 0.44, -self.radius * 0.03, -self.radius * 0.24),
+            );
+            let m = uniforms.model_matrix;
+            let muzzle = Vector3::new(
+                m.m0 * local.x + m.m4 * local.y + m.m8 * local.z + m.m12,
+                m.m1 * local.x + m.m5 * local.y + m.m9 * local.z + m.m13,
+                m.m2 * local.x + m.m6 * local.y + m.m10 * local.z + m.m14,
+            );
+            let local_pilot =
+                self.model_center + Vector3::new(0.0, self.radius * 0.14, -self.radius * 0.03);
+            let pilot = Vector3::new(
+                m.m0 * local_pilot.x + m.m4 * local_pilot.y + m.m8 * local_pilot.z + m.m12,
+                m.m1 * local_pilot.x + m.m5 * local_pilot.y + m.m9 * local_pilot.z + m.m13,
+                m.m2 * local_pilot.x + m.m6 * local_pilot.y + m.m10 * local_pilot.z + m.m14,
+            );
+            alien.orbit_target(pilot, self.orientation, frame_time);
+            alien.weapons(input, muzzle, self.max_speed, uniforms, world);
+        }
 
         let trail_emitting = (input.boost
+            || drive.is_some()
             || (self.speed > self.max_speed * 0.5 && self.yaw_rate.abs() > 0.35))
             && self.speed > MOVEMENT_THRESHOLD;
         self.effects.update(
             trail_emitting,
-            input.thrust && !input.braking,
+            (input.thrust || drive.is_some()) && !input.braking,
             frame_time,
             self.world_velocity(),
             self.speed_ratio(),
@@ -127,7 +280,7 @@ impl ShipMovement {
     }
 
     pub fn is_moving(&self) -> bool {
-        self.speed > MOVEMENT_THRESHOLD
+        self.speed > MOVEMENT_THRESHOLD || self.recoil.length_sqr() > 0.01
     }
 
     pub fn can_accelerate(&self) -> bool {
@@ -150,6 +303,55 @@ impl ShipMovement {
     pub fn draw_exhaust(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
         self.effects
             .draw_exhaust(framebuffer, uniforms, self.camera.reference_distance());
+        if let Some(alien) = &self.alien {
+            alien.draw(framebuffer, uniforms, self.target);
+        }
+        self.impact.draw(framebuffer, uniforms);
+    }
+
+    pub fn take_impact(&mut self) -> bool {
+        self.impact.take_event()
+    }
+
+    fn advance_with_collisions(&mut self, dt: f32, world: &crate::scene::world::World) {
+        if dt <= 0.0 {
+            return;
+        }
+        let mut remaining = dt;
+        let mut velocity = self.world_velocity() + self.recoil;
+        for _ in 0..6 {
+            let delta = velocity * remaining;
+            let Some(hit) = world.sweep_vehicle(self.target, delta, self.radius) else {
+                self.target += delta;
+                break;
+            };
+            self.target = hit.safe_position;
+            let incoming = velocity.dot(hit.normal);
+            if incoming < 0.0 {
+                velocity -= hit.normal * (1.65 * incoming);
+            }
+            let outward = velocity.dot(hit.normal);
+            velocity += hit.normal * (self.max_speed * 1.2 - outward).max(0.0);
+            self.recoil = velocity;
+            self.speed = 0.0;
+            if self.impact_cooldown <= 0.0 {
+                self.impact.burst(
+                    self.target - hit.normal * self.radius * 0.7,
+                    hit.normal,
+                    self.radius,
+                );
+                self.impact_cooldown = 0.20;
+                if let Some(alien) = &mut self.alien {
+                    alien.collide();
+                }
+                self.effects.clear();
+            }
+            remaining *= 1.0 - hit.fraction;
+            if remaining < 0.00001 {
+                break;
+            }
+        }
+        self.recoil *= (-2.4 * dt).exp();
     }
 
     fn world_velocity(&self) -> Vector3 {
@@ -209,11 +411,20 @@ impl ShipMovement {
         let local_attitude = Matrix::rotate_y(self.ship_yaw)
             * Matrix::rotate_x(self.ship_pitch)
             * Matrix::rotate_z(self.ship_roll);
+        let special = self.alien.as_ref().map_or(Matrix::identity(), |a| {
+            let r = a.visual_rotation();
+            let s = a.visual_scale();
+            Matrix::scale(s.x, s.y, s.z)
+                * Matrix::rotate_y(r.y)
+                * Matrix::rotate_x(r.x)
+                * Matrix::rotate_z(r.z)
+        });
         uniforms.model_matrix = Matrix::translate(
             -self.model_center.x,
             -self.model_center.y,
             -self.model_center.z,
-        ) * local_attitude
+        ) * special
+            * local_attitude
             * ship_direction
             * Matrix::translate(self.target.x, self.target.y, self.target.z);
     }
@@ -237,4 +448,183 @@ fn axis_value(positive: bool, negative: bool) -> f32 {
 
 fn move_towards(current: f32, target: f32, max_delta: f32) -> f32 {
     current + (target - current).clamp(-max_delta, max_delta)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ship::vehicle::Vehicle;
+
+    #[test]
+    fn thrust_and_spin_are_independent_without_steering_the_camera() {
+        let car = Vehicle::car();
+        let saucer = Vehicle::saucer(car.radius);
+        let mut ship = ShipMovement::new(&saucer.mesh, 2.0);
+        ship.configure_vehicle(car.radius, 2.0, true);
+        let world = crate::scene::world::World::new();
+        let mut u = saucer.preview_uniforms(0.0);
+        for _ in 0..60 {
+            ship.update(
+                &InputState {
+                    thrust: true,
+                    boost: true,
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+                &mut u,
+                &world,
+            );
+        }
+        assert!(ship.speed > 0.0);
+        assert_eq!(ship.alien.as_ref().unwrap().visual_rotation().y, 0.0);
+        let before = ship.speed;
+        for _ in 0..30 {
+            ship.update(
+                &InputState {
+                    spin_held: true,
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+                &mut u,
+                &world,
+            );
+        }
+        assert!(ship.speed < before);
+        assert!(ship.alien.as_ref().unwrap().visual_rotation().y > 0.1);
+        assert_eq!(ship.orientation, Quaternion::identity());
+    }
+
+    #[test]
+    fn both_vehicles_bounce_instead_of_tunneling_through_a_planet() {
+        use crate::{celestial_shaders::CelestialKind, objects::celestial::CelestialBody};
+        let car = Vehicle::car();
+        let saucer = Vehicle::saucer(car.radius);
+        for vehicle in [&car, &saucer] {
+            let mut ship = ShipMovement::new(&vehicle.mesh, 2.0);
+            ship.configure_vehicle(
+                car.radius,
+                2.0,
+                vehicle.kind == super::super::vehicle::VehicleKind::Saucer,
+            );
+            ship.target = Vector3::zero();
+            ship.speed = 10_000.0;
+            let center = Vector3::new(0., 0., 100.);
+            let mut world = crate::scene::world::World::new();
+            world.add(CelestialBody::new(CelestialKind::Rocky, center).with_scale(20.0));
+            ship.advance_with_collisions(0.1, &world);
+            assert!(ship.target.z < 100.0 - 20.0 - ship.radius);
+            assert!(ship.recoil.z < 0.0);
+            assert_eq!(ship.speed, 0.0);
+            assert!(ship.take_impact());
+            assert!(!ship.take_impact());
+            for _ in 0..120 {
+                ship.advance_with_collisions(1.0 / 60.0, &world);
+                assert!((ship.target - center).length() > 20.0 + ship.radius);
+            }
+            ship.target = center + Vector3::new(1., 0., 0.);
+            ship.recoil = Vector3::zero();
+            ship.advance_with_collisions(1.0 / 60.0, &world);
+            assert!((ship.target - center).length() > 20.0 + ship.radius);
+        }
+    }
+
+    #[test]
+    fn aiming_does_not_move_the_vehicle_or_change_its_heading() {
+        let car = Vehicle::car();
+        let saucer = Vehicle::saucer(car.radius);
+        let mut ship = ShipMovement::new(&saucer.mesh, 2.0);
+        ship.configure_vehicle(car.radius, 2.0, true);
+        let world = crate::scene::world::World::new();
+        let mut u = saucer.preview_uniforms(0.0);
+        let position = ship.target;
+        let heading = ship.orientation;
+        ship.command(super::super::commands::Command::Chase);
+        for i in 0..120 {
+            ship.update(
+                &InputState {
+                    mouse_position: Vector2::new((i * 5) as f32, 250.0),
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+                &mut u,
+                &world,
+            );
+        }
+        assert_eq!(ship.target, position);
+        assert_eq!(ship.orientation, heading);
+    }
+
+    #[test]
+    fn sneeze_covers_a_large_distance_and_returns_to_normal_speed() {
+        let car = Vehicle::car();
+        let vehicle = Vehicle::saucer(car.radius);
+        let mut ship = ShipMovement::new(&vehicle.mesh, 2.0);
+        ship.configure_vehicle(car.radius, 2.0, true);
+        let world = crate::scene::world::World::new();
+        let mut u = vehicle.preview_uniforms(0.0);
+        ship.update(&InputState::default(), 0.0, &mut u, &world);
+        ship.command(super::super::commands::Command::Sneeze);
+        let mut distance = 0.0;
+        let mut previous = ship.target;
+        for _ in 0..330 {
+            ship.update(&InputState::default(), 1.0 / 60.0, &mut u, &world);
+            distance += (ship.target - previous).length();
+            previous = ship.target;
+        }
+        assert!(
+            distance > car.radius * 350.0,
+            "distancia {distance}, radio {}",
+            car.radius
+        );
+        assert!(ship.speed <= ship.max_speed * BOOST_SPEED_MULTIPLIER);
+        assert!(!ship.alien.as_ref().unwrap().active());
+    }
+
+    #[test]
+    fn saucer_acceleration_and_top_speed_are_three_times_the_car() {
+        let car = Vehicle::car();
+        let saucer = Vehicle::saucer(car.radius);
+        let mut normal = ShipMovement::new(&car.mesh, 2.0);
+        let mut alien = ShipMovement::new(&saucer.mesh, 2.0);
+        normal.configure_vehicle(car.radius, 2.0, false);
+        alien.configure_vehicle(car.radius, 2.0, true);
+        for _ in 0..300 {
+            normal.update_motion(true, true, false, 1.0 / 60.0);
+            alien.update_motion(true, true, false, 1.0 / 60.0);
+            assert!((alien.speed - normal.speed * 3.0).abs() < 0.001);
+        }
+        for _ in 0..300 {
+            normal.update_motion(false, false, true, 1.0 / 60.0);
+            alien.update_motion(false, false, true, 1.0 / 60.0);
+        }
+        assert_eq!(normal.speed, 0.0);
+        assert_eq!(alien.speed, 0.0);
+    }
+
+    #[test]
+    fn every_planet_has_a_safe_jump_after_orbiting() {
+        let mut world = crate::scene::build_solar_system();
+        world.update(&crate::scene::world::WorldUpdate { frame_time: 51.0 });
+        let car = Vehicle::car();
+        let saucer = Vehicle::saucer(car.radius);
+        let mut ship = ShipMovement::new(&saucer.mesh, 2.0);
+        ship.configure_vehicle(car.radius, 2.0, true);
+        for target in world.travel_targets() {
+            ship.speed = 100.0;
+            assert!(ship.teleport(&target, &world), "{}", target.name);
+            assert_eq!(ship.speed, 0.0);
+            let offset = target.position - ship.target;
+            assert!(offset.length() > target.radius * 3.0);
+            let forward =
+                transform_direction(&ship.orientation.to_matrix(), Vector3::new(0., 0., 1.));
+            assert!(forward.dot(offset.normalize()) > 0.999);
+            let mut hits = Vec::new();
+            world.query_sphere(
+                ship.target,
+                ship.camera.reference_distance() * 1.5,
+                &mut hits,
+            );
+            assert!(hits.is_empty(), "{}", target.name);
+        }
+    }
 }

@@ -29,6 +29,12 @@ pub struct FollowCamera {
 }
 
 impl FollowCamera {
+    pub fn snap(&mut self, orientation: Quaternion) {
+        self.orientation = orientation;
+        self.orbit_pitch = 0.0;
+        self.orbit_yaw = 0.0;
+        self.return_timer = 0.0;
+    }
     pub fn new(target_radius: f32) -> Self {
         let distance = target_radius * INITIAL_DISTANCE_FACTOR;
         Self {

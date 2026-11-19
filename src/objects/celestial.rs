@@ -135,6 +135,8 @@ fn surface_normalize(v: Vector3) -> Vector3 {
 }
 
 pub struct CelestialBody {
+    name: Option<&'static str>,
+    inspection: Option<Interaction>,
     fragment_surface: Option<SurfaceShader>,
     colors: Vec<Vector3>,
     lod: SphereLod,
@@ -155,6 +157,15 @@ pub struct CelestialBody {
 }
 
 impl CelestialBody {
+    pub fn named(mut self, name: &'static str) -> Self {
+        self.name = Some(name);
+        self.inspection = super::inspections::named(name);
+        self
+    }
+    pub(crate) fn with_inspection(mut self, inspection: Interaction) -> Self {
+        self.inspection = Some(inspection);
+        self
+    }
     pub fn new(kind: CelestialKind, position: Vector3) -> Self {
         Self::styled(kind, position, CelestialStyle::default())
     }
@@ -240,6 +251,8 @@ impl CelestialBody {
         let shape = BodyShape::Sphere;
         let mesh = body_mesh(lod, shape);
         let mut body = Self {
+            name: None,
+            inspection: None,
             fragment_surface: None,
             colors: vec![Vector3::zero(); mesh.vertices.len()],
             lod,
@@ -403,6 +416,9 @@ impl CelestialBody {
 }
 
 impl WorldObject for CelestialBody {
+    fn travel_name(&self) -> Option<&'static str> {
+        self.name
+    }
     fn transform(&self) -> &WorldTransform {
         &self.transform
     }
@@ -434,6 +450,9 @@ impl WorldObject for CelestialBody {
     }
 
     fn interaction(&self) -> Option<Interaction> {
+        if let Some(inspection) = self.inspection {
+            return Some(inspection);
+        }
         Some(match self.role {
             BodyRole::Star => Interaction {
                 prompt: "[F] Examinar estrella",

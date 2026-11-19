@@ -18,16 +18,29 @@ use rendering::uniforms::Uniforms;
 use scene::world::{World, WorldUpdate};
 use scene::{Starfield, build_solar_system};
 use ship::{InputState, RocketAudio, ShipMovement};
+use ship::{
+    alien_audio::AlienAudio,
+    commands::{Command, CommandReader},
+    menu::{TravelMenu, choose_vehicle},
+    vehicle::{Vehicle, VehicleKind},
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const WINDOW_WIDTH: i32 = 800;
 const WINDOW_HEIGHT: i32 = 600;
 const WINDOW_TITLE: &str = "Software Renderer";
-const MODEL_PATH: &str = "assets/red_car.obj";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--preview-alien") {
+        preview_alien();
+        return;
+    }
+    if std::env::args().any(|arg| arg == "--preview-ships") {
+        preview_ships();
+        return;
+    }
     if std::env::args().any(|arg| arg == "--benchmark-coruscant") {
         let captures = std::env::args().any(|arg| arg == "--capturas");
         if let Err(error) = scene::planets::benchmark_coruscant(captures) {
@@ -60,16 +73,39 @@ fn main() {
         .size(WINDOW_WIDTH, WINDOW_HEIGHT)
         .title(WINDOW_TITLE)
         .build();
+    window.set_exit_key(None);
     let audio = RaylibAudio::init_audio_device().expect("Failed to initialize audio");
     let mut rocket_audio = RocketAudio::new(&audio);
+    let mut alien_audio = AlienAudio::new(&audio);
 
-    // Load the 3D object from an .obj file
-    let mesh = rendering::load_objects::load_obj(MODEL_PATH).expect("Failed to load .obj file");
     let mut renderer = Renderer::default();
     let mut performance = PerformanceMonitor::default();
     let mut interaction = InteractionSystem::default();
     let starfield = Starfield::new();
     let mut framebuffer = Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
+    let car = Vehicle::car();
+    let car_radius = car.radius;
+    let mut vehicles = [car, Vehicle::saucer(car_radius)];
+    let Some(selected) = choose_vehicle(
+        &mut window,
+        &thread,
+        &mut framebuffer,
+        &mut renderer,
+        &mut vehicles,
+    ) else {
+        return;
+    };
+    let mut vehicle = if selected == 0 {
+        let [car, _] = vehicles;
+        car
+    } else {
+        let [_, saucer] = vehicles;
+        saucer
+    };
+    let mut travel = TravelMenu::default();
+    let mut commands = CommandReader::default();
+    let mut jump_flash = 0.0_f32;
+    let mut elapsed = 0.0;
 
     let mut uniforms = Uniforms {
         model_matrix: Matrix::identity(),
@@ -78,25 +114,83 @@ fn main() {
         camera_up: Vector3::new(0.0, 1.0, 0.0),
         light_position: None,
     };
-    let mut movement = ShipMovement::new(&mesh, rocket_audio.moving_duration());
+    let mut movement = ShipMovement::new(&vehicle.mesh, rocket_audio.moving_duration());
+    movement.set_muzzle(vehicle.muzzle);
+    movement.configure_vehicle(
+        car_radius,
+        rocket_audio.moving_duration(),
+        vehicle.kind == VehicleKind::Saucer,
+    );
     let mut world = build_solar_system();
-    movement.update(&InputState::read(&window), 0.0, &mut uniforms);
+    movement.update(&InputState::read(&window), 0.0, &mut uniforms, &world);
 
     while !window.window_should_close() {
         let frame_start = Instant::now();
         renderer.begin_frame();
         framebuffer.clear();
-        let input = InputState::read(&window);
-        let frame_time = window.get_frame_time();
+        let frame_time = window.get_frame_time().min(0.1);
+        elapsed += frame_time;
+        jump_flash = (jump_flash - frame_time * 2.0).max(0.0);
         let update_start = Instant::now();
-        movement.update(&input, frame_time, &mut uniforms);
         world.update(&WorldUpdate { frame_time });
+        let targets = world.travel_targets();
+        let was_open = travel.open;
+        if !was_open && window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
+            break;
+        }
+        commands.tick(frame_time);
+        let mut open_jump = false;
+        while let Some(ch) = window.get_char_pressed() {
+            if !travel.open
+                && let Some(command) = commands.push(ch)
+            {
+                match command {
+                    Command::Jump if vehicle.kind == VehicleKind::Saucer => open_jump = true,
+                    Command::Sneeze | Command::Chase if vehicle.kind == VehicleKind::Saucer => {
+                        movement.command(command)
+                    }
+                    _ => {}
+                }
+            }
+        }
+        let jump = travel.update(&mut window, vehicle.kind, open_jump, &targets);
+        if let Some(index) = jump
+            && movement.teleport(&targets[index], &world)
+        {
+            jump_flash = 1.0;
+            alien_audio.stop();
+        }
+        let blocked = was_open || travel.open || jump.is_some();
+        let input = if blocked {
+            InputState::default()
+        } else {
+            InputState::for_vehicle(&window, vehicle.kind == VehicleKind::Saucer)
+        };
+        movement.update(
+            &input,
+            if travel.open { 0.0 } else { frame_time },
+            &mut uniforms,
+            &world,
+        );
+        alien_audio.set_paused(travel.open);
+        if input.braking {
+            alien_audio.stop();
+        }
+        if movement.take_impact() {
+            alien_audio.stop();
+            alien_audio.play(&[ship::alien::Cue::Impact]);
+        }
+        if !travel.open
+            && let Some(alien) = &mut movement.alien
+        {
+            alien_audio.play(&alien.take_cues());
+        }
         uniforms.light_position = world.primary_light_position();
         interaction.update(&mut world, &uniforms, input.interact_pressed, frame_time);
         rocket_audio.update(
             input.thrust,
             input.braking,
-            movement.is_moving(),
+            movement.is_moving() && !travel.open,
             movement.can_accelerate(),
             movement.speed_ratio(),
             frame_time,
@@ -106,17 +200,157 @@ fn main() {
         starfield.draw(&mut framebuffer, &uniforms);
         world.draw(&mut renderer, &mut framebuffer, &uniforms);
 
-        // Render the 3D object to the framebuffer
-        renderer.render_lit(&mut framebuffer, &uniforms, &mesh);
+        vehicle.draw(&mut renderer, &mut framebuffer, &uniforms, elapsed);
         movement.draw_trail(&mut framebuffer, &uniforms);
         movement.draw_exhaust(&mut framebuffer, &uniforms);
 
-        framebuffer.swap_buffers(&mut window, &thread, interaction.overlay());
+        framebuffer.present_with_overlay_bottom(
+            &mut window,
+            &thread,
+            if travel.open {
+                None
+            } else {
+                interaction.overlay()
+            },
+            14,
+            |d| {
+                travel.draw(d, vehicle.kind, &targets, jump_flash);
+                if !travel.open
+                    && let Some(alien) = &movement.alien
+                {
+                    alien.draw_hud(d);
+                }
+            },
+        );
         let mut metrics = renderer.metrics();
         metrics.update = update_time;
         metrics.frame = frame_start.elapsed();
         performance.record(metrics);
         thread::sleep(FRAME_DELAY);
+    }
+}
+
+fn preview_ships() {
+    let car = Vehicle::car();
+    let radius = car.radius;
+    let mut vehicles = [car, Vehicle::saucer(radius)];
+    std::fs::create_dir_all("target/previews").expect("crear directorio de capturas");
+    let mut renderer = Renderer::default();
+    for vehicle in &mut vehicles {
+        let mut fb = Framebuffer::new(800, 600, Color::new(9, 16, 26, 255));
+        let u = vehicle.preview_uniforms(0.25);
+        renderer.begin_frame();
+        vehicle.draw(&mut renderer, &mut fb, &u, 0.0);
+        let name = if vehicle.kind == VehicleKind::Car {
+            "car"
+        } else {
+            "ufo"
+        };
+        fb.save_png(format!("target/previews/{name}.png"))
+            .expect("guardar captura");
+        println!("target/previews/{name}.png");
+    }
+}
+
+fn preview_alien() {
+    use ship::alien::Cue;
+    let car = Vehicle::car();
+    let mut vehicle = Vehicle::saucer(car.radius);
+    let mut world = build_solar_system();
+    world.update(&WorldUpdate { frame_time: 0.0 });
+    let stars = Starfield::new();
+    std::fs::create_dir_all("target/previews").expect("crear capturas");
+    for (name, command, frames) in [
+        ("achu-charge", Command::Sneeze, 45),
+        ("achu-burst", Command::Sneeze, 68),
+        ("mish-laser", Command::Chase, 10),
+        ("mish-orbit", Command::Chase, 90),
+    ] {
+        let mut movement = ShipMovement::new(&vehicle.mesh, 2.0);
+        movement.set_muzzle(vehicle.muzzle);
+        movement.configure_vehicle(car.radius, 2.0, true);
+        let mut u = vehicle.preview_uniforms(0.0);
+        movement.update(&InputState::default(), 0., &mut u, &world);
+        movement.command(command);
+        for frame in 0..frames {
+            let input = InputState {
+                mouse_position: Vector2::new(620., 230.),
+                firing: name == "mish-laser" && frame == frames - 1,
+                ..Default::default()
+            };
+            movement.update(&input, 1. / 60., &mut u, &world);
+        }
+        let mut fb = Framebuffer::new(800, 600, Color::new(5, 10, 20, 255));
+        let mut renderer = Renderer::default();
+        stars.draw(&mut fb, &u);
+        world.draw(&mut renderer, &mut fb, &u);
+        vehicle.draw(&mut renderer, &mut fb, &u, frames as f32 / 60.);
+        movement.draw_trail(&mut fb, &u);
+        movement.draw_exhaust(&mut fb, &u);
+        fb.save_png(format!("target/previews/{name}.png"))
+            .expect("guardar captura");
+    }
+    for (name, cue) in [
+        ("charge", Cue::Charge),
+        ("sneeze-stereo", Cue::Sneeze),
+        ("laser-stereo", Cue::Laser),
+        ("mish", Cue::Chase),
+        ("impact", Cue::Impact),
+    ] {
+        std::fs::write(
+            format!("target/previews/{name}.wav"),
+            ship::alien_audio::synthesize(cue),
+        )
+        .expect("guardar audio");
+    }
+    println!("Capturas y efectos estereo: target/previews/");
+    preview_impacts();
+}
+
+fn preview_impacts() {
+    use celestial_shaders::CelestialKind;
+    let car = Vehicle::car();
+    let radius = car.radius;
+    for mut vehicle in [car, Vehicle::saucer(radius)] {
+        let mut world = World::new();
+        world.add(
+            CelestialBody::new(CelestialKind::Rocky, Vector3::new(0., 0., 150.)).with_scale(55.0),
+        );
+        let mut movement = ShipMovement::new(&vehicle.mesh, 0.3);
+        movement.set_muzzle(vehicle.muzzle);
+        movement.configure_vehicle(radius, 0.3, vehicle.kind == VehicleKind::Saucer);
+        let mut u = vehicle.preview_uniforms(0.0);
+        for _ in 0..1200 {
+            movement.update(
+                &InputState {
+                    thrust: true,
+                    boost: true,
+                    ..Default::default()
+                },
+                1.0 / 60.0,
+                &mut u,
+                &world,
+            );
+            if movement.take_impact() {
+                break;
+            }
+        }
+        for _ in 0..3 {
+            movement.update(&InputState::default(), 1.0 / 60.0, &mut u, &world);
+        }
+        u.light_position = Some(Vector3::new(-200., 300., -100.));
+        let mut fb = Framebuffer::new(800, 600, Color::new(5, 10, 20, 255));
+        let mut renderer = Renderer::default();
+        world.draw(&mut renderer, &mut fb, &u);
+        vehicle.draw(&mut renderer, &mut fb, &u, 0.0);
+        movement.draw_exhaust(&mut fb, &u);
+        let name = if vehicle.kind == VehicleKind::Car {
+            "impact-car"
+        } else {
+            "impact-ufo"
+        };
+        fb.save_png(format!("target/previews/{name}.png"))
+            .expect("guardar choque");
     }
 }
 
@@ -216,6 +450,73 @@ fn build_benchmark_world(object_count: usize) -> World {
 #[cfg(test)]
 mod benchmark_tests {
     use super::*;
+
+    #[test]
+    fn travel_catalog_stays_stable_when_rendering_reorders_the_world() {
+        let mut world = build_solar_system();
+        world.update(&WorldUpdate { frame_time: 0.0 });
+        let before = world.travel_targets();
+        assert_eq!(before.len(), 18);
+        assert!(before.iter().any(|t| t.name == "Kashyyyk"));
+        assert!(before.iter().any(|t| t.name == "Coruscant"));
+        let uniforms = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: Vector3::zero(),
+            camera_target: Vector3::new(0., 0., 1.),
+            camera_up: Vector3::new(0., 1., 0.),
+            light_position: None,
+        };
+        world.draw(
+            &mut Renderer::default(),
+            &mut Framebuffer::new(32, 24, Color::BLACK),
+            &uniforms,
+        );
+        world.update(&WorldUpdate { frame_time: 10.0 });
+        let after = world.travel_targets();
+        assert_eq!(
+            before.iter().map(|t| t.name).collect::<Vec<_>>(),
+            after.iter().map(|t| t.name).collect::<Vec<_>>()
+        );
+        assert!(
+            before
+                .iter()
+                .zip(&after)
+                .any(|(a, b)| (a.position - b.position).length() > 1.0)
+        );
+    }
+
+    #[test]
+    #[ignore = "Genera capturas de revision en target/previews sin abrir ventanas"]
+    fn capture_vehicle_previews() {
+        preview_ships();
+        let ufo = image::open("target/previews/ufo.png").unwrap().to_rgb8();
+        let green = ufo
+            .pixels()
+            .filter(|p| p[1] > p[0].saturating_add(30) && p[1] > p[2].saturating_add(20))
+            .count();
+        assert!(
+            green > 1000,
+            "El piloto y las luces verdes deben ser visibles"
+        );
+    }
+
+    #[test]
+    #[ignore = "Genera capturas de efectos y muestras WAV sin abrir ventanas"]
+    fn capture_alien_effects() {
+        preview_alien();
+        let burst = image::open("target/previews/achu-burst.png")
+            .unwrap()
+            .to_rgb8();
+        let glowing = burst
+            .pixels()
+            .filter(|p| p[1] > 150 && p[1] > p[0].saturating_add(35))
+            .count();
+        assert!(
+            glowing > 3000,
+            "La nube expansiva debe iluminar una zona amplia: {glowing}"
+        );
+    }
+
 
     fn args(values: &[&str]) -> Vec<String> {
         values.iter().map(|value| (*value).to_owned()).collect()

@@ -48,6 +48,7 @@ const EXHAUST_CLOSE_MAX_RADIUS: i32 = 20;
 const EXHAUST_CLOSE_GROWTH: f32 = 3.0;
 
 pub struct ShipEffects {
+    alien: bool,
     wing_tips: [Vector3; 2],
     rear_point: Vector3,
     trail_speed: f32,
@@ -87,6 +88,7 @@ struct ExhaustParticle {
 impl ShipEffects {
     pub fn new(wing_tips: [Vector3; 2], rear_point: Vector3, ship_radius: f32) -> Self {
         Self {
+            alien: false,
             wing_tips,
             rear_point,
             trail_speed: ship_radius * TRAIL_SPEED_FACTOR,
@@ -99,6 +101,20 @@ impl ShipEffects {
             smoke_timer: 0.0,
             rng_state: 0x8542_5987,
         }
+    }
+
+    pub fn set_alien(&mut self, alien: bool) {
+        self.alien = alien;
+    }
+
+    pub fn clear(&mut self) {
+        self.trail.clear();
+        self.exhaust.clear();
+        self.trail_timer = 0.0;
+        self.core_timer = 0.0;
+        self.flame_timer = 0.0;
+        self.spark_timer = 0.0;
+        self.smoke_timer = 0.0;
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -171,7 +187,11 @@ impl ShipEffects {
                 continue;
             };
             let intensity = (particle.lifetime / TRAIL_PARTICLE_LIFETIME).clamp(0.0, 1.0);
-            let color = Vector3::new(TRAIL_COLOR[0], TRAIL_COLOR[1], TRAIL_COLOR[2]) * intensity;
+            let color = if self.alien {
+                Vector3::new(0.2, 1.0, 0.38) * intensity
+            } else {
+                Vector3::new(TRAIL_COLOR[0], TRAIL_COLOR[1], TRAIL_COLOR[2]) * intensity
+            };
             if let Some((start, start_depth)) = previous[particle.wing] {
                 draw_thick_line(
                     framebuffer,
@@ -434,7 +454,24 @@ impl ShipEffects {
                     .round() as i32;
             let radius =
                 (far_radius + close_growth).clamp(EXHAUST_MIN_RADIUS, EXHAUST_CLOSE_MAX_RADIUS);
-            draw_square(framebuffer, position, depth, radius, color);
+            let color = if self.alien {
+                let brightness = color.x.max(color.y).max(color.z);
+                Vector3::new(0.16 + 0.32 * t, 1.0, 0.18 + 0.35 * t) * brightness
+            } else {
+                color
+            };
+            if self.alien {
+                super::alien::glow(
+                    framebuffer,
+                    position,
+                    depth,
+                    radius as f32 + 1.5,
+                    color,
+                    0.9,
+                );
+            } else {
+                draw_square(framebuffer, position, depth, radius, color);
+            }
         }
     }
 
