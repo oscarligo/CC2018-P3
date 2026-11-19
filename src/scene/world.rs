@@ -32,6 +32,9 @@ struct WorldPose {
 }
 
 impl TransformAnchor {
+    pub(crate) fn world_position(&self) -> Vector3 {
+        self.world_pose().position
+    }
     fn new(position: Vector3, scale: Vector3) -> Self {
         Self(Rc::new(RefCell::new(AnchorState {
             local_position: position,
@@ -285,6 +288,11 @@ impl WorldTransform {
         self.resolve_world_transform();
     }
 
+    pub(crate) fn set_local_position(&mut self, position: Vector3) {
+        self.anchor.set_local_position(position);
+        self.resolve_world_transform();
+    }
+
     pub fn set_local_scale(&mut self, scale: Vector3) {
         self.anchor.set_local_scale(scale);
         self.resolve_world_transform();
@@ -394,6 +402,27 @@ pub struct BodyImpact {
 }
 
 impl World {
+    /// Find by stable name while following a body, or by surface distance when entering local flight.
+    pub fn navigation_target(&self, name: Option<&str>, position: Vector3) -> Option<TravelTarget> {
+        self.objects
+            .iter()
+            .filter_map(|entry| {
+                let body_name = entry.object.travel_name()?;
+                if name.is_some_and(|name| name != body_name) {
+                    return None;
+                }
+                let (center, radius) = collider_sphere(entry.object.as_ref())?;
+                Some(TravelTarget {
+                    name: body_name,
+                    position: center,
+                    radius,
+                })
+            })
+            .min_by(|a, b| {
+                ((a.position - position).length() - a.radius)
+                    .total_cmp(&((b.position - position).length() - b.radius))
+            })
+    }
     pub(crate) fn primary_light_bounds(&self) -> Option<(Vector3, f32)> {
         self.objects.iter().find_map(|entry| {
             entry.object.light_position()?;

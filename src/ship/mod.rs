@@ -6,6 +6,7 @@ pub(crate) mod commands;
 mod effects;
 mod impact;
 mod input;
+mod local;
 pub(crate) mod menu;
 mod movement;
 pub(crate) mod radio;

@@ -11,6 +11,7 @@ pub(crate) mod dyson;
 mod inspections;
 pub mod ring;
 pub mod rock;
+mod volume;
 
 /// Register all objects in the world.
 pub fn register_all(world: &mut World) {
@@ -80,7 +81,13 @@ fn register_body(
         ),
     };
     let anchor = body.transform.anchor();
+    let body = crate::scene::planets::exploration::customize(
+        name,
+        body,
+        world.primary_light_position().unwrap_or(Vector3::zero()),
+    );
     world.add(body);
+    crate::scene::planets::exploration::decorate(world, name, anchor.clone(), definition.scale);
 
     if let Some(field) = definition.rock_field {
         world.add(rock::RockField::attached_to(

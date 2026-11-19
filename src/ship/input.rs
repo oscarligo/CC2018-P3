@@ -19,6 +19,7 @@ const ORBIT_BUTTON: MouseButton = MouseButton::MOUSE_BUTTON_RIGHT;
 
 #[derive(Default)]
 pub struct InputState {
+    pub local_pressed: bool,
     pub spin_pressed: bool,
     pub spin_held: bool,
     pub firing: bool,
@@ -46,6 +47,7 @@ impl InputState {
         let orbiting = window.is_mouse_button_down(ORBIT_BUTTON);
 
         Self {
+            local_pressed: window.is_key_pressed(KeyboardKey::KEY_L),
             spin_pressed: window.is_key_pressed(KeyboardKey::KEY_R),
             spin_held: window.is_key_down(KeyboardKey::KEY_R),
             firing: window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT),

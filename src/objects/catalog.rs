@@ -15,14 +15,14 @@ pub(super) fn travel_name(index: usize) -> Option<&'static str> {
         6 => "Desierto con anillo",
         9 => "Planeta enano",
         10 => "Supertierra",
-        12 => "Mundo Amatista",
+        12 => "Ureski",
         13 => "Planeta Arido",
         14 => "Coloso Joviano",
         18 => "Gigante Anillado Imperial",
         21 => "Enana Marron",
         23 => "Gigante Cian",
         25 => "Gigante Cobalto",
-        27 => "Helado Exterior",
+        27 => "Alfa Riddertal",
         29 => "Gigante Lejano",
         _ => return None,
     })
@@ -460,19 +460,19 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
             rock_field: None,
             rocks: Vec::new(),
         },
-        // 12: Mundo Amatista (Muy hundido)
+        // 12: Ureski: synchronous sun-facing hemisphere
         BodyDefinition {
             kind: CelestialKind::Rocky,
             model_path: None,
-            shape: BodyShape::Rocky,
+            shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 4200.0, 112.0, -4500.0),
             scale: BODY_SCALE * 0.88,
             style: style(
                 Vector3::new(-5.2, 0.7, -3.3),
                 Vector3::new(1.05, 0.62, 1.22),
                 0.74,
-                0.40,
-                0.065,
+                1.0,
+                0.0,
             ),
             primary_light: false,
             motion: MotionDefinition::Orbit {
@@ -480,10 +480,10 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
                 axis: Vector3::new(1.0, 0.1, -0.5),
                 angular_speed: 0.013,
             },
-            atmosphere: atmo(1.06, Vector3::new(0.78, 0.28, 1.0), 0.10, BodyShape::Sphere),
+            atmosphere: None,
             ring: None,
-            rock_field: field(0x3C90_7B2E, 30),
-            rocks: surface_rocks_preset(3),
+            rock_field: None,
+            rocks: Vec::new(),
         },
         // 13: Planeta Árido
         BodyDefinition {
@@ -840,19 +840,19 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
             rock_field: None,
             rocks: surface_rocks_preset(0),
         },
-        // 27: Helado Exterior
+        // 27: Alfa Riddertal, the living archive
         BodyDefinition {
-            kind: CelestialKind::Rocky,
+            kind: CelestialKind::GasGiant,
             model_path: None,
             shape: BodyShape::Sphere,
             position: orbit_pos(sun_pos, 12600.0, 216.0, 11500.0),
-            scale: BODY_SCALE * 0.58,
+            scale: BODY_SCALE * 0.82,
             style: style(
                 Vector3::new(4.8, -0.6, 2.2),
-                Vector3::new(0.96, 0.82, 0.76),
+                Vector3::new(1.0, 0.35, 0.72),
                 0.80,
-                0.20,
-                0.032,
+                1.0,
+                0.065,
             ),
             primary_light: false,
             motion: MotionDefinition::Orbit {
@@ -860,15 +860,10 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
                 axis: Vector3::new(-1.0, 0.3, 0.8),
                 angular_speed: 0.0038,
             },
-            atmosphere: atmo(
-                1.08,
-                Vector3::new(0.62, 0.78, 0.95),
-                0.06,
-                BodyShape::Sphere,
-            ),
+            atmosphere: None,
             ring: None,
             rock_field: None,
-            rocks: surface_rocks_preset(1),
+            rocks: Vec::new(),
         },
         // 28: Luna Binaria de #27
         BodyDefinition {
@@ -887,7 +882,7 @@ pub(super) fn solar_system_definitions() -> Vec<BodyDefinition> {
             primary_light: false,
             motion: MotionDefinition::ParentOrbit {
                 parent: 27,
-                initial_offset: moon_offset(180.0, 60.0, 45.0),
+                initial_offset: moon_offset(510.0, 60.0, 45.0),
                 axis: Vector3::new(0.28, 1.0, -0.18),
                 angular_speed: 0.048,
             },

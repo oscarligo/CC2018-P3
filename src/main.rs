@@ -34,6 +34,13 @@ const WINDOW_TITLE: &str = "Software Renderer";
 const FRAME_DELAY: Duration = Duration::from_millis(16);
 
 fn main() {
+    if std::env::args().any(|arg| arg == "--preview-persona3") {
+        if let Err(error) = scene::planets::exploration::preview() {
+            eprintln!("No se pudo capturar los planetas: {error}");
+            std::process::exit(2);
+        }
+        return;
+    }
     if std::env::args().any(|arg| arg == "--benchmark-radio") {
         ship::radio::benchmark();
         return;
@@ -268,6 +275,9 @@ fn main() {
                 if radio_visible { PANEL_HEIGHT + 32 } else { 14 },
                 |d| {
                     travel.draw(d, vehicle.kind, &targets, jump_flash);
+                    if !travel.open {
+                        movement.draw_navigation(d);
+                    }
                     if !travel.open
                         && let Some(alien) = &movement.alien
                     {

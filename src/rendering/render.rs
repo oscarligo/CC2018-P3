@@ -14,6 +14,7 @@ use std::time::Instant;
 enum RenderMode {
     Opaque,
     Lit,
+    LitFill,
     Transparent,
 }
 
@@ -68,6 +69,24 @@ impl Renderer {
             None,
             None,
             RenderMode::Lit,
+            None,
+        );
+    }
+
+    /// Diffuse light plus a soft ambient fill for life visible in Ureski's permanent dusk.
+    pub fn render_lit_fill(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+    ) {
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            None,
+            None,
+            RenderMode::LitFill,
             None,
         );
     }
@@ -169,11 +188,14 @@ impl Renderer {
         self.transformed_vertices.clear();
         self.transformed_vertices
             .extend(mesh.vertices.iter().enumerate().map(|(index, vertex)| {
-                let mut transformed = if mode == RenderMode::Lit {
+                let mut transformed = if matches!(mode, RenderMode::Lit | RenderMode::LitFill) {
                     lit_vertex_shader(vertex, uniforms)
                 } else {
                     vertex_shader(vertex, uniforms)
                 };
+                if mode == RenderMode::LitFill {
+                    transformed.color = transformed.color * 0.62 + vertex.color * 0.38;
+                }
                 if let Some(colors) = colors {
                     transformed.color = colors[index];
                 }
