@@ -567,7 +567,7 @@ pub(super) fn glow(
         }
     }
 }
-fn beam(
+pub(crate) fn beam(
     fb: &mut Framebuffer,
     u: &Uniforms,
     mut a: Vector3,

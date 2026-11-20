@@ -5,3 +5,4 @@ pub(crate) mod world;
 
 pub(crate) use solar_system::build_solar_system;
 pub(crate) use starfield::Starfield;
+pub(crate) mod debris;

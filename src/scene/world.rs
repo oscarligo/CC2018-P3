@@ -32,6 +32,15 @@ struct WorldPose {
 }
 
 impl TransformAnchor {
+    fn belongs_to(&self, root: &Self) -> bool {
+        Rc::ptr_eq(&self.0, &root.0)
+            || self
+                .0
+                .borrow()
+                .parent
+                .as_ref()
+                .is_some_and(|(parent, _)| parent.belongs_to(root))
+    }
     pub(crate) fn world_position(&self) -> Vector3 {
         self.world_pose().position
     }
@@ -384,11 +393,14 @@ struct WorldEntry {
 #[derive(Default)]
 pub struct World {
     objects: Vec<WorldEntry>,
+    destroyed: Vec<WorldEntry>,
+    debris: Vec<ObjectId>,
     next_object_id: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct TravelTarget {
+    pub id: ObjectId,
     pub name: &'static str,
     pub position: Vector3,
     pub radius: f32,
@@ -413,6 +425,7 @@ impl World {
                 }
                 let (center, radius) = collider_sphere(entry.object.as_ref())?;
                 Some(TravelTarget {
+                    id: entry.id,
                     name: body_name,
                     position: center,
                     radius,
@@ -476,6 +489,7 @@ impl World {
                 let name = entry.object.travel_name()?;
                 let (position, radius) = collider_sphere(entry.object.as_ref())?;
                 Some(TravelTarget {
+                    id: entry.id,
                     name,
                     position,
                     radius,
@@ -488,6 +502,58 @@ impl World {
     }
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn target_by_id(&self, id: ObjectId) -> Option<TravelTarget> {
+        let entry = self.objects.iter().find(|entry| entry.id == id)?;
+        let name = entry.object.travel_name()?;
+        // The primary light is never a weapon target.
+        if entry.object.light_position().is_some() {
+            return None;
+        }
+        let (position, radius) = collider_sphere(entry.object.as_ref())?;
+        Some(TravelTarget {
+            id,
+            name,
+            position,
+            radius,
+        })
+    }
+
+    pub fn weapon_target(&self, origin: Vector3, direction: Vector3) -> Option<TravelTarget> {
+        let hit = self.raycast(Ray::new(origin, direction)?, f32::MAX)?;
+        let target = self.target_by_id(hit.object_id)?;
+        ((target.position - origin).length() < target.radius * 16.0 + 600.0).then_some(target)
+    }
+
+    /// Remove the complete hierarchy, including nested surface models and moons.
+    /// Retain ownership so the demonstration can restore the system without reloading.
+    pub fn destroy_planet(&mut self, id: ObjectId) -> Option<TravelTarget> {
+        let target = self.target_by_id(id)?;
+        let root = self
+            .objects
+            .iter()
+            .find(|e| e.id == id)?
+            .object
+            .transform()
+            .anchor();
+        let (removed, remaining): (Vec<_>, Vec<_>) = std::mem::take(&mut self.objects)
+            .into_iter()
+            .partition(|e| e.object.transform().anchor().belongs_to(&root));
+        self.destroyed.extend(removed);
+        self.objects = remaining;
+        let debris_id = self.add(crate::scene::debris::PlanetDebris::new(
+            target.position,
+            target.radius,
+        ));
+        self.debris.push(debris_id);
+        Some(target)
+    }
+
+    pub fn restore_planets(&mut self) {
+        self.objects.retain(|e| !self.debris.contains(&e.id));
+        self.debris.clear();
+        self.objects.append(&mut self.destroyed);
     }
 
     pub fn add<T: WorldObject + 'static>(&mut self, object: T) -> ObjectId {
@@ -687,6 +753,62 @@ mod tests {
     use std::cell::RefCell;
     use std::f32::consts::PI;
     use std::rc::Rc;
+
+    #[test]
+    fn destruction_removes_nested_attachments_and_restores_stable_ids() {
+        use crate::{celestial_shaders::CelestialKind, objects::celestial::CelestialBody};
+        let mut world = World::new();
+        let body = CelestialBody::new(CelestialKind::Rocky, Vector3::new(0., 0., 100.))
+            .with_scale(10.)
+            .named("Objetivo");
+        let root = body.transform.anchor();
+        let id = world.add(body);
+        let mut child = WorldTransform::new(Vector3::zero(), Vector3::one());
+        child.set_parent(root, Vector3::new(2., 0., 0.));
+        let anchor = child.anchor();
+        let child_id = world.add(TestObject {
+            transform: child,
+            radius: Some(1.),
+        });
+        let mut grandchild = WorldTransform::new(Vector3::zero(), Vector3::one());
+        grandchild.set_parent(anchor, Vector3::new(1., 0., 0.));
+        let grandchild_id = world.add(TestObject {
+            transform: grandchild,
+            radius: Some(0.5),
+        });
+        let other = world.add(
+            CelestialBody::new(CelestialKind::Rocky, Vector3::new(50., 0., 100.))
+                .with_scale(5.)
+                .named("Vecino"),
+        );
+        world.update(&WorldUpdate { frame_time: 0. });
+        world.sort_front_to_back(Vector3::new(500., 0., 0.));
+        assert!(world.destroy_planet(id).is_some());
+        assert!(world.destroy_planet(id).is_none());
+        assert!(
+            world
+                .objects
+                .iter()
+                .all(|e| ![id, child_id, grandchild_id].contains(&e.id))
+        );
+        assert_eq!(world.travel_targets().len(), 1);
+        assert!(world.target_by_id(other).is_some());
+        assert!(
+            world
+                .raycast(
+                    Ray::new(Vector3::zero(), Vector3::new(0., 0., 1.)).unwrap(),
+                    1000.
+                )
+                .is_none()
+        );
+        world.restore_planets();
+        world.restore_planets();
+        assert_eq!(world.objects.len(), 4);
+        assert!(world.target_by_id(id).is_some());
+        for id in [child_id, grandchild_id] {
+            assert!(world.objects.iter().any(|e| e.id == id));
+        }
+    }
 
     #[test]
     fn frustum_culling_reduces_submitted_triangle_count() {
