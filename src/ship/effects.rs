@@ -19,13 +19,13 @@ const TRAIL_MAX_POINT_RADIUS: i32 = 1;
 const GAS_CAPACITY: usize = 420;
 const SPARK_CAPACITY: usize = 180;
 const EXHAUST_SPEED_REFERENCE_RATIO: f32 = 0.45;
-const CORE_EMISSION_INTERVAL: f32 = 1.0 / 80.0; 
+const CORE_EMISSION_INTERVAL: f32 = 1.0 / 80.0;
 const PLUME_EMISSION_INTERVAL: f32 = 1.0 / 95.0;
 const SPARK_EMISSION_INTERVAL: f32 = 1.0 / 50.0;
 const EXHAUST_CLOSE_DENSITY_BOOST: f32 = 1.0;
-const EXHAUST_CLOSE_MAX_DENSITY: f32 = 1.55; 
+const EXHAUST_CLOSE_MAX_DENSITY: f32 = 1.55;
 
-const CORE_LIFETIME: f32 = 0.14; 
+const CORE_LIFETIME: f32 = 0.14;
 const PLUME_LIFETIME: f32 = 0.65;
 const SPARK_LIFETIME: f32 = 0.34;
 
@@ -33,21 +33,20 @@ const CORE_EXIT_SPEED: f32 = 2.4;
 const PLUME_EXIT_SPEED: f32 = 2.85;
 const SPARK_EXIT_SPEED: f32 = 5.4;
 
-const FLAME_DRAG: f32 = 3.4; 
+const FLAME_DRAG: f32 = 3.4;
 const SMOKE_DRAG: f32 = 0.0;
 const SPARK_DRAG: f32 = 3.4;
 const SMOKE_BUOYANCY: f32 = 0.42;
-const SMOKE_TRANSITION_TEMP: f32 = 0.0; 
+const SMOKE_TRANSITION_TEMP: f32 = 0.0;
 
 const NOZZLE_SEGMENTS: usize = 10;
 
 // --- Pixel-art field & palettes ---
 const PIXEL_CELL_SIZE: i32 = 3;
 const MAX_GRID_CELLS: usize = 48_000;
-const FLAME_THRESHOLD: f32 = 0.56; 
+const FLAME_THRESHOLD: f32 = 0.56;
 const SMOKE_THRESHOLD: f32 = 999.50;
-const GLOW_THRESHOLD: f32 = 0.22; 
-
+const GLOW_THRESHOLD: f32 = 0.22;
 
 const FIRE_PALETTE: [[u8; 3]; 7] = [
     [98, 20, 8],
@@ -69,12 +68,7 @@ const ALIEN_FIRE_PALETTE: [[u8; 3]; 7] = [
     [235, 255, 232],
 ];
 
-const SMOKE_PALETTE: [[u8; 3]; 4] = [
-    [24, 22, 26],
-    [44, 42, 48],
-    [70, 68, 76],
-    [104, 102, 112],
-];
+const SMOKE_PALETTE: [[u8; 3]; 4] = [[24, 22, 26], [44, 42, 48], [70, 68, 76], [104, 102, 112]];
 
 const BAYER_4X4: [[f32; 4]; 4] = [
     [0.0 / 16.0, 8.0 / 16.0, 2.0 / 16.0, 10.0 / 16.0],
@@ -333,7 +327,16 @@ impl ExhaustField {
 
                 if flame_active && (!smoke_active || cell.flame_depth <= cell.smoke_depth + 0.12) {
                     let color = shade_flame_cell(flame_val, cell.core_heat, bayer, alien);
-                    fill_cell_opaque(fb, sx, sy, self.cell_size, fb_w, fb_h, cell.flame_depth, color);
+                    fill_cell_opaque(
+                        fb,
+                        sx,
+                        sy,
+                        self.cell_size,
+                        fb_w,
+                        fb_h,
+                        cell.flame_depth,
+                        color,
+                    );
                 } else if smoke_active {
                     let gx_i = gx as isize;
                     let gy_i = gy as isize;
@@ -347,11 +350,20 @@ impl ExhaustField {
                                 + self.heat_at(gx_i, gy_i - 1));
                     let color =
                         shade_smoke_cell(smoke_val, grad_x, grad_y, nearby_heat, bayer, alien);
-                    fill_cell_opaque(fb, sx, sy, self.cell_size, fb_w, fb_h, cell.smoke_depth, color);
+                    fill_cell_opaque(
+                        fb,
+                        sx,
+                        sy,
+                        self.cell_size,
+                        fb_w,
+                        fb_h,
+                        cell.smoke_depth,
+                        color,
+                    );
                 } else if cell.heat >= GLOW_THRESHOLD && cell.flame_depth.is_finite() {
-                    let glow_strength =
-                        ((cell.heat - GLOW_THRESHOLD) / (FLAME_THRESHOLD - GLOW_THRESHOLD))
-                            .clamp(0.0, 1.0);
+                    let glow_strength = ((cell.heat - GLOW_THRESHOLD)
+                        / (FLAME_THRESHOLD - GLOW_THRESHOLD))
+                        .clamp(0.0, 1.0);
                     let intensity = glow_strength * PARTICLE_INTENSITY * 0.85;
                     fill_cell_light(
                         fb,
@@ -663,8 +675,8 @@ impl ShipEffects {
             let (disk_x, disk_y) = self.next_disk_sample();
             let radial_dist = (disk_x * disk_x + disk_y * disk_y).sqrt();
             let radial_scale = if is_core { 0.45 } else { 0.92 };
-            let nozzle_offset =
-                right * (disk_x * nozzle_radius * radial_scale) + up * (disk_y * nozzle_radius * radial_scale);
+            let nozzle_offset = right * (disk_x * nozzle_radius * radial_scale)
+                + up * (disk_y * nozzle_radius * radial_scale);
 
             let spread = if is_core { 0.12 } else { 0.34 };
             let exit_base = if is_core {
@@ -1022,7 +1034,11 @@ fn step_gas_parcel(parcel: &mut GasParcel, dt: f32, exhaust_time: f32, ship_radi
 
     // Kelvin-Helmholtz shear curl grows once the parcel leaves the pressurized nozzle core.
     let laminar_release = (parcel.age / 0.085).clamp(0.0, 1.0);
-    let swirl = curl_turbulence(parcel.position * (1.0 / ship_radius), exhaust_time, parcel.seed);
+    let swirl = curl_turbulence(
+        parcel.position * (1.0 / ship_radius),
+        exhaust_time,
+        parcel.seed,
+    );
     let turb_strength = ship_radius * if parcel.is_core { 1.35 } else { 3.25 } * laminar_release;
     parcel.velocity += swirl * (turb_strength * dt);
 
@@ -1041,7 +1057,11 @@ fn step_gas_parcel(parcel: &mut GasParcel, dt: f32, exhaust_time: f32, ship_radi
 fn step_spark(spark: &mut SparkParticle, dt: f32, exhaust_time: f32, ship_radius: f32) {
     spark.prev_position = spark.position;
     spark.velocity *= (-SPARK_DRAG * dt).exp();
-    let swirl = curl_turbulence(spark.position * (1.5 / ship_radius), exhaust_time, spark.seed);
+    let swirl = curl_turbulence(
+        spark.position * (1.5 / ship_radius),
+        exhaust_time,
+        spark.seed,
+    );
     spark.velocity += swirl * (ship_radius * 1.4 * dt);
     spark.position += spark.velocity * dt;
     spark.lifetime -= dt;
@@ -1086,12 +1106,18 @@ fn curl_turbulence(scaled_pos: Vector3, time: f32, seed: u32) -> Vector3 {
     let s2 = seed ^ 0x85EB_CA6B;
     let s3 = seed ^ 0xC2B2_AE35;
 
-    let dpz_dy = (noise_3d(p.x, p.y + eps, p.z, s3) - noise_3d(p.x, p.y - eps, p.z, s3)) / (2.0 * eps);
-    let dpy_dz = (noise_3d(p.x, p.y, p.z + eps, s2) - noise_3d(p.x, p.y, p.z - eps, s2)) / (2.0 * eps);
-    let dpx_dz = (noise_3d(p.x, p.y, p.z + eps, s1) - noise_3d(p.x, p.y, p.z - eps, s1)) / (2.0 * eps);
-    let dpz_dx = (noise_3d(p.x + eps, p.y, p.z, s3) - noise_3d(p.x - eps, p.y, p.z, s3)) / (2.0 * eps);
-    let dpy_dx = (noise_3d(p.x + eps, p.y, p.z, s2) - noise_3d(p.x - eps, p.y, p.z, s2)) / (2.0 * eps);
-    let dpx_dy = (noise_3d(p.x, p.y + eps, p.z, s1) - noise_3d(p.x, p.y - eps, p.z, s1)) / (2.0 * eps);
+    let dpz_dy =
+        (noise_3d(p.x, p.y + eps, p.z, s3) - noise_3d(p.x, p.y - eps, p.z, s3)) / (2.0 * eps);
+    let dpy_dz =
+        (noise_3d(p.x, p.y, p.z + eps, s2) - noise_3d(p.x, p.y, p.z - eps, s2)) / (2.0 * eps);
+    let dpx_dz =
+        (noise_3d(p.x, p.y, p.z + eps, s1) - noise_3d(p.x, p.y, p.z - eps, s1)) / (2.0 * eps);
+    let dpz_dx =
+        (noise_3d(p.x + eps, p.y, p.z, s3) - noise_3d(p.x - eps, p.y, p.z, s3)) / (2.0 * eps);
+    let dpy_dx =
+        (noise_3d(p.x + eps, p.y, p.z, s2) - noise_3d(p.x - eps, p.y, p.z, s2)) / (2.0 * eps);
+    let dpx_dy =
+        (noise_3d(p.x, p.y + eps, p.z, s1) - noise_3d(p.x, p.y - eps, p.z, s1)) / (2.0 * eps);
 
     Vector3::new(dpz_dy - dpy_dz, dpx_dz - dpz_dx, dpy_dx - dpx_dy)
 }
@@ -1166,7 +1192,8 @@ fn shade_smoke_cell(
     // Volumetric top-left key shading from the scalar field gradient.
     let rim_light = (grad_y * 0.9 - grad_x * 0.45).clamp(-0.6, 0.8);
     let density_tone = ((smoke_value - SMOKE_THRESHOLD) * 0.55).clamp(0.0, 0.5);
-    let shade_score = (0.38 + rim_light * 0.65 + density_tone * 0.35 + bayer * 0.22).clamp(0.0, 1.0);
+    let shade_score =
+        (0.38 + rim_light * 0.65 + density_tone * 0.35 + bayer * 0.22).clamp(0.0, 1.0);
     let level = (shade_score * 3.0).round().clamp(0.0, 3.0) as usize;
     let [r, g, b] = SMOKE_PALETTE[level];
     let base = Vector3::new(r as f32, g as f32, b as f32) * (1.0 / 255.0);

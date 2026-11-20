@@ -8,6 +8,7 @@ pub struct Framebuffer {
     pub width: u32,
     pub height: u32,
     pixels: Vec<u8>,
+    display_pixels: Vec<u8>,
     depth_buffer: Vec<f32>,
     background_color: Color,
     texture: Option<Texture2D>,
@@ -31,6 +32,7 @@ impl Framebuffer {
             width,
             height,
             pixels: vec![0; (width * height) as usize * CHANNELS_PER_PIXEL],
+            display_pixels: vec![0; (width * height) as usize * CHANNELS_PER_PIXEL],
             depth_buffer: vec![f32::INFINITY; (width * height) as usize],
             background_color,
             texture: None,
@@ -49,6 +51,36 @@ impl Framebuffer {
             ]);
         }
         self.depth_buffer.fill(f32::INFINITY);
+    }
+
+    fn prepare_display_pixels(&mut self) {
+        const PIXEL_SIZE: usize = 2;
+        self.display_pixels.copy_from_slice(&self.pixels);
+        let width = self.width as usize;
+        let height = self.height as usize;
+        for top in (0..height).step_by(PIXEL_SIZE) {
+            for left in (0..width).step_by(PIXEL_SIZE) {
+                let mut sum = [0_u16; 4];
+                let mut count = 0_u16;
+                for y in top..(top + PIXEL_SIZE).min(height) {
+                    for x in left..(left + PIXEL_SIZE).min(width) {
+                        let start = (y * width + x) * CHANNELS_PER_PIXEL;
+                        for channel in 0..4 {
+                            sum[channel] += self.pixels[start + channel] as u16;
+                        }
+                        count += 1;
+                    }
+                }
+                let color = sum.map(|value| (value / count) as u8);
+                for y in top..(top + PIXEL_SIZE).min(height) {
+                    for x in left..(left + PIXEL_SIZE).min(width) {
+                        let start = (y * width + x) * CHANNELS_PER_PIXEL;
+                        self.display_pixels[start..start + CHANNELS_PER_PIXEL]
+                            .copy_from_slice(&color);
+                    }
+                }
+            }
+        }
     }
 
     pub fn point(&mut self, x: i32, y: i32, depth: f32, color: Vector3) {
@@ -144,6 +176,7 @@ impl Framebuffer {
         bottom_margin: i32,
         draw_ui: impl FnOnce(&mut RaylibDrawHandle),
     ) {
+        self.prepare_display_pixels();
         if self.texture.is_none() {
             let image = Image::gen_image_color(
                 self.width as i32,
@@ -155,7 +188,7 @@ impl Framebuffer {
         let Some(texture) = &mut self.texture else {
             return;
         };
-        if texture.update_texture(&self.pixels).is_err() {
+        if texture.update_texture(&self.display_pixels).is_err() {
             return;
         }
 
@@ -217,6 +250,48 @@ impl Framebuffer {
             }
         }
         draw_ui(&mut renderer);
+        draw_crt_overlay(&mut renderer, self.width as i32, self.height as i32);
+    }
+}
+
+fn draw_crt_overlay(d: &mut impl RaylibDraw, width: i32, height: i32) {
+    // Sparse phosphor stripes preserve color while scanlines hide hard polygon edges.
+    for x in (0..width).step_by(8) {
+        d.draw_rectangle(x, 0, 2, height, Color::new(255, 45, 35, 5));
+        d.draw_rectangle(x + 4, 0, 2, height, Color::new(35, 80, 255, 5));
+    }
+    for y in (2..height).step_by(4) {
+        d.draw_rectangle(0, y, width, 1, Color::new(0, 0, 0, 38));
+    }
+
+    // Layered edge falloff approximates the curved, dark glass of a CRT.
+    for band in 0..18 {
+        let alpha = (3 + (18 - band) * 2) as u8;
+        d.draw_rectangle(band, band, width - band * 2, 1, Color::new(0, 0, 0, alpha));
+        d.draw_rectangle(
+            band,
+            height - 1 - band,
+            width - band * 2,
+            1,
+            Color::new(0, 0, 0, alpha),
+        );
+        d.draw_rectangle(band, band, 1, height - band * 2, Color::new(0, 0, 0, alpha));
+        d.draw_rectangle(
+            width - 1 - band,
+            band,
+            1,
+            height - band * 2,
+            Color::new(0, 0, 0, alpha),
+        );
+    }
+
+    // Stepped corners make the rectangular framebuffer read as rounded glass.
+    for (inset, length) in [(0, 18), (1, 13), (2, 9), (3, 6), (4, 3)] {
+        let color = Color::new(0, 0, 0, 225);
+        d.draw_rectangle(inset, inset, length, 1, color);
+        d.draw_rectangle(width - inset - length, inset, length, 1, color);
+        d.draw_rectangle(inset, height - inset - 1, length, 1, color);
+        d.draw_rectangle(width - inset - length, height - inset - 1, length, 1, color);
     }
 }
 
@@ -287,6 +362,26 @@ mod tests {
                 .chunks_exact(CHANNELS_PER_PIXEL)
                 .all(|pixel| pixel == [1, 2, 3, 255])
         );
+    }
+
+    #[test]
+    fn display_groups_the_scene_into_two_by_two_pixels() {
+        let mut framebuffer = Framebuffer::new(3, 2, Color::BLACK);
+        framebuffer.pixels[..12].copy_from_slice(&[0, 0, 0, 255, 100, 0, 0, 255, 20, 40, 60, 255]);
+        framebuffer.pixels[12..]
+            .copy_from_slice(&[0, 100, 0, 255, 100, 100, 0, 255, 60, 80, 100, 255]);
+
+        framebuffer.prepare_display_pixels();
+
+        for pixel in [0, 1, 3, 4] {
+            let start = pixel * 4;
+            assert_eq!(
+                &framebuffer.display_pixels[start..start + 4],
+                &[50, 50, 0, 255]
+            );
+        }
+        assert_eq!(&framebuffer.display_pixels[8..12], &[40, 60, 80, 255]);
+        assert_eq!(&framebuffer.display_pixels[20..24], &[40, 60, 80, 255]);
     }
 
     #[test]
