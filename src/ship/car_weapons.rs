@@ -1,10 +1,11 @@
 use super::alien::{beam, glow};
 use crate::{
-    physics::Ray,
+    physics::{ObjectId, Ray},
     rendering::{framebuffer::Framebuffer, projection::project_vertex, uniforms::Uniforms},
     scene::world::World,
 };
 use raylib::prelude::*;
+use std::collections::HashMap;
 use std::f32::consts::TAU;
 
 const RED: Vector3 = Vector3 {
@@ -14,6 +15,8 @@ const RED: Vector3 = Vector3 {
 };
 const RANGE: f32 = 100_000.0;
 const MAX_EXPLOSION_PARTICLES: usize = 360;
+const PLANET_HEALTH: u16 = 24;
+const MAX_CRACKS: usize = 144;
 
 struct Bolt {
     side: usize,
@@ -31,6 +34,12 @@ struct ExplosionParticle {
     hot: bool,
 }
 
+struct Crack {
+    planet: ObjectId,
+    start: Vector3,
+    end: Vector3,
+}
+
 pub struct CarWeapons {
     radius: f32,
     bolts: Vec<Bolt>,
@@ -40,6 +49,8 @@ pub struct CarWeapons {
     hold_time: f32,
     continuous: bool,
     impact_cooldown: f32,
+    damage: HashMap<ObjectId, u16>,
+    cracks: Vec<Crack>,
 }
 
 impl CarWeapons {
@@ -53,6 +64,8 @@ impl CarWeapons {
             hold_time: 0.0,
             continuous: false,
             impact_cooldown: 0.0,
+            damage: HashMap::new(),
+            cracks: Vec::with_capacity(MAX_CRACKS),
         }
     }
 
@@ -63,7 +76,7 @@ impl CarWeapons {
         firing_held: bool,
         muzzles: [Vector3; 2],
         forward: Vector3,
-        world: &World,
+        world: &mut World,
     ) -> bool {
         self.impact_cooldown = (self.impact_cooldown - dt).max(0.0);
         for bolt in &mut self.bolts {
@@ -112,7 +125,7 @@ impl CarWeapons {
         side: usize,
         muzzles: [Vector3; 2],
         forward: Vector3,
-        world: &World,
+        world: &mut World,
         explode: bool,
     ) {
         let muzzle = muzzles[side];
@@ -121,11 +134,11 @@ impl CarWeapons {
         };
         let hit = world.raycast(ray, RANGE);
         let end = hit.map_or(muzzle + ray.direction * RANGE, |hit| hit.position);
-        if explode
-            && let Some(hit) = hit
-            && world.target_by_id(hit.object_id).is_some()
-        {
-            self.explosion(hit.position, ray.direction);
+        if explode && let Some(hit) = hit {
+            if let Some(target) = world.target_by_id(hit.object_id) {
+                self.explosion(hit.position, ray.direction);
+                self.damage_planet(target, hit.position, world);
+            }
         }
         self.bolts.push(Bolt {
             side,
@@ -133,6 +146,53 @@ impl CarWeapons {
             end,
             life: 0.12,
         });
+    }
+
+    fn damage_planet(
+        &mut self,
+        target: crate::scene::world::TravelTarget,
+        hit: Vector3,
+        world: &mut World,
+    ) {
+        let health = self.damage.entry(target.id).or_default();
+        *health += 1;
+        let destroyed = *health >= PLANET_HEALTH;
+        self.add_cracks(target, hit);
+        if destroyed {
+            for _ in 0..3 {
+                self.explosion(hit, (hit - target.position).normalize());
+            }
+            world.destroy_planet(target.id);
+            self.damage.remove(&target.id);
+            self.cracks.retain(|crack| crack.planet != target.id);
+        }
+    }
+
+    fn add_cracks(&mut self, target: crate::scene::world::TravelTarget, hit: Vector3) {
+        let normal = (hit - target.position).normalize();
+        let reference = if normal.y.abs() < 0.9 {
+            Vector3::new(0.0, 1.0, 0.0)
+        } else {
+            Vector3::new(1.0, 0.0, 0.0)
+        };
+        let tangent = normal.cross(reference).normalize();
+        let bitangent = normal.cross(tangent).normalize();
+        for _ in 0..3.min(MAX_CRACKS.saturating_sub(self.cracks.len())) {
+            let angle = self.random() * TAU;
+            let length = 0.025 + self.random() * 0.065;
+            let start = (normal
+                + tangent * ((self.random() - 0.5) * 0.018)
+                + bitangent * ((self.random() - 0.5) * 0.018))
+                .normalize();
+            let end =
+                (start + tangent * (angle.cos() * length) + bitangent * (angle.sin() * length))
+                    .normalize();
+            self.cracks.push(Crack {
+                planet: target.id,
+                start,
+                end,
+            });
+        }
     }
 
     fn explosion(&mut self, position: Vector3, incoming: Vector3) {
@@ -164,7 +224,21 @@ impl CarWeapons {
         self.rng as f32 / u32::MAX as f32
     }
 
-    pub fn draw(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms) {
+    pub fn draw(&self, framebuffer: &mut Framebuffer, uniforms: &Uniforms, world: &World) {
+        for crack in &self.cracks {
+            let Some(target) = world.target_by_id(crack.planet) else {
+                continue;
+            };
+            let lift = target.radius * 1.006;
+            beam(
+                framebuffer,
+                uniforms,
+                target.position + crack.start * lift,
+                target.position + crack.end * lift,
+                Vector3::new(1.0, 0.16, 0.01),
+                0.7,
+            );
+        }
         for bolt in &self.bolts {
             beam(framebuffer, uniforms, bolt.origin, bolt.end, RED, 2.6);
             if let Some((position, depth)) = project_vertex(
@@ -245,7 +319,7 @@ mod tests {
             true,
             [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)],
             Vector3::new(0.0, 0.0, 1.0),
-            &world,
+            &mut world,
         ));
 
         assert_eq!(weapons.bolts.len(), 1);
@@ -257,7 +331,7 @@ mod tests {
             false,
             [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)],
             Vector3::new(0.0, 0.0, 1.0),
-            &world,
+            &mut world,
         );
         weapons.update(
             1.0 / 60.0,
@@ -265,16 +339,17 @@ mod tests {
             true,
             [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)],
             Vector3::new(0.0, 0.0, 1.0),
-            &world,
+            &mut world,
         );
         assert_eq!(weapons.bolts.len(), 1);
         assert_eq!(weapons.bolts[0].side, 1);
+        assert_eq!(weapons.cracks.len(), 6);
         assert!(world.target_by_id(planet).is_some());
     }
 
     #[test]
     fn held_click_keeps_two_beams_attached_to_moving_muzzles() {
-        let world = World::new();
+        let mut world = World::new();
         let mut weapons = CarWeapons::new(2.0);
         let mut muzzles = [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)];
         for frame in 0..12 {
@@ -284,7 +359,7 @@ mod tests {
                 true,
                 muzzles,
                 Vector3::new(0.0, 0.0, 1.0),
-                &world,
+                &mut world,
             );
         }
         assert_eq!(weapons.bolts.len(), 2);
@@ -296,10 +371,35 @@ mod tests {
             true,
             muzzles,
             Vector3::new(0.0, 0.0, 1.0),
-            &world,
+            &mut world,
         );
         assert_eq!(weapons.bolts.len(), 2);
         assert_eq!(weapons.bolts[0].origin, muzzles[0]);
         assert_eq!(weapons.bolts[1].origin, muzzles[1]);
+    }
+
+    #[test]
+    fn enough_laser_hits_destroy_the_planet_and_clear_its_cracks() {
+        let mut world = World::new();
+        let planet = world.add(
+            CelestialBody::new(CelestialKind::Rocky, Vector3::new(0.0, 0.0, 80.0))
+                .named("Planeta frágil")
+                .with_scale(8.0),
+        );
+        let mut weapons = CarWeapons::new(2.0);
+        for _ in 0..PLANET_HEALTH {
+            weapons.update(
+                0.13,
+                true,
+                false,
+                [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)],
+                Vector3::new(0.0, 0.0, 1.0),
+                &mut world,
+            );
+        }
+
+        assert!(world.target_by_id(planet).is_none());
+        assert!(!weapons.damage.contains_key(&planet));
+        assert!(weapons.cracks.iter().all(|crack| crack.planet != planet));
     }
 }

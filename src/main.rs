@@ -294,7 +294,7 @@ fn main() {
                         &target,
                         frame_time,
                         &mut uniforms,
-                        &world,
+                        &mut world,
                     );
                 } else {
                     movement.update(
@@ -314,7 +314,7 @@ fn main() {
                         input.firing_held,
                         muzzles,
                         forward,
-                        &world,
+                        &mut world,
                     ) {
                         alien_audio.play(&[ship::alien::Cue::Laser]);
                     }
@@ -366,7 +366,7 @@ fn main() {
                 movement.draw_trail(&mut framebuffer, &draw_uniforms);
                 movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
                 if let Some(car_weapons) = &car_weapons {
-                    car_weapons.draw(&mut framebuffer, &draw_uniforms);
+                    car_weapons.draw(&mut framebuffer, &draw_uniforms, &world);
                 }
                 let launch_origin = vehicle.muzzle.map_or(movement.position(), |p| {
                     model_point(&uniforms.model_matrix, p)
