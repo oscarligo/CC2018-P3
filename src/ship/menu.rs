@@ -16,6 +16,10 @@ fn inside(p: Vector2, x: i32, y: i32, w: i32, h: i32) -> bool {
     p.x >= x as f32 && p.x < (x + w) as f32 && p.y >= y as f32 && p.y < (y + h) as f32
 }
 fn button(d: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, label: &str, selected: bool) {
+    let mut font_size = 20;
+    while font_size > 13 && d.measure_text(label, font_size) > w - 36 {
+        font_size -= 1;
+    }
     d.draw_rectangle(
         x,
         y,
@@ -33,7 +37,7 @@ fn button(d: &mut RaylibDrawHandle, x: i32, y: i32, w: i32, label: &str, selecte
         label,
         x + 18,
         y + 17,
-        if label.len() > 21 { 16 } else { 20 },
+        font_size,
         if selected { MINT } else { Color::RAYWHITE },
     );
 }
@@ -43,7 +47,7 @@ pub fn choose_vehicle(
     thread: &RaylibThread,
     fb: &mut Framebuffer,
     renderer: &mut Renderer,
-    vehicles: &mut [Vehicle; 2],
+    vehicles: &mut [Vehicle; 3],
 ) -> Option<usize> {
     let stars = Starfield::new();
     let mut selected = 0;
@@ -52,23 +56,30 @@ pub fn choose_vehicle(
         if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
             return None;
         }
-        if window.is_key_pressed(KeyboardKey::KEY_LEFT)
-            || window.is_key_pressed(KeyboardKey::KEY_ONE)
-        {
-            selected = 0;
+        if window.is_key_pressed(KeyboardKey::KEY_LEFT) {
+            selected = (selected + 2) % 3;
         }
-        if window.is_key_pressed(KeyboardKey::KEY_RIGHT)
-            || window.is_key_pressed(KeyboardKey::KEY_TWO)
+        if window.is_key_pressed(KeyboardKey::KEY_RIGHT) {
+            selected = (selected + 1) % 3;
+        }
+        for (i, key) in [
+            KeyboardKey::KEY_ONE,
+            KeyboardKey::KEY_TWO,
+            KeyboardKey::KEY_THREE,
+        ]
+        .into_iter()
+        .enumerate()
         {
-            selected = 1;
+            if window.is_key_pressed(key) {
+                selected = i;
+            }
         }
         let p = window.get_mouse_position();
         if window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
-            if inside(p, 48, 430, 340, 52) {
-                selected = 0;
-            }
-            if inside(p, 412, 430, 340, 52) {
-                selected = 1;
+            for i in 0..3 {
+                if inside(p, 28 + i as i32 * 252, 430, 240, 52) {
+                    selected = i;
+                }
             }
             if inside(p, 260, 530, 280, 52) {
                 return Some(selected);
@@ -84,25 +95,30 @@ pub fn choose_vehicle(
         let u = vehicles[selected].preview_uniforms((elapsed * 0.38).sin() * 0.65);
         stars.draw(fb, &u);
         vehicles[selected].draw(renderer, fb, &u, elapsed);
-        fb.present(window, thread, None, |d| {
-            d.draw_rectangle(0, 0, 800, 112, Color::new(7, 13, 22, 235));
-            text(d, "GALAXY / HANGAR", 48, 28, 16, MINT);
-            text(d, "Elige tu nave", 48, 56, 34, Color::RAYWHITE);
-            text(d, &format!("0{} / 02", selected + 1), 660, 66, 18, MUTED);
-            d.draw_rectangle(0, 415, 800, 185, Color::new(7, 13, 22, 235));
-            button(d, 48, 430, 340, "1   CARRO ORIGINAL", selected == 0);
-            button(d, 412, 430, 340, "2   OVNI / GATO ALIEN", selected == 1);
-            let info = if selected == 0 {
-                "Vuelo clasico / Velocidad 1x / fm: radio del carro"
-            } else {
-                "Espacio: acelerar / R: giro / mishmish: punteria / achu"
-            };
-            text(d, info, 48, 498, 16, MUTED);
-            button(d, 260, 530, 280, "DESPEGAR  [ENTER]", true);
-        });
+        fb.present(window, thread, None, |d| draw_hangar(d, selected));
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
     None
+}
+
+pub(super) fn draw_hangar(d: &mut RaylibDrawHandle, selected: usize) {
+    d.draw_rectangle(0, 0, 800, 112, Color::new(7, 13, 22, 235));
+    text(d, "GALAXY / HANGAR", 48, 28, 16, MINT);
+    text(d, "Elige tu nave", 48, 56, 34, Color::RAYWHITE);
+    text(d, &format!("0{} / 03", selected + 1), 660, 66, 18, MUTED);
+    d.draw_rectangle(0, 415, 800, 185, Color::new(7, 13, 22, 235));
+    button(d, 28, 430, 240, "1  CARRO ORIGINAL", selected == 0);
+    button(d, 280, 430, 240, "2  OVNI / GATO ALIEN", selected == 1);
+    button(d, 532, 430, 240, "3  DESTRUCTOR ESTELAR", selected == 2);
+    let info = if selected == 0 {
+        "Vuelo clasico / Velocidad 1x / fm: radio del carro"
+    } else if selected == 1 {
+        "Espacio: acelerar / R: giro / mishmish: punteria / achu"
+    } else {
+        "Destructor Estelar / B: bomba / J: cargar / 3.14: viajar"
+    };
+    text(d, info, 48, 498, 16, MUTED);
+    button(d, 260, 530, 280, "DESPEGAR  [ENTER]", true);
 }
 
 #[derive(Default)]
@@ -118,7 +134,7 @@ impl TravelMenu {
         requested: bool,
         targets: &[TravelTarget],
     ) -> Option<usize> {
-        if kind == VehicleKind::Saucer && requested {
+        if kind != VehicleKind::Car && requested {
             self.open = true;
         }
         if !self.open || targets.is_empty() {
@@ -178,6 +194,8 @@ impl TravelMenu {
                 d,
                 if kind == VehicleKind::Saucer {
                     "OVNI  /  3x  /  Teletransporte: 3.14"
+                } else if kind == VehicleKind::Destroyer {
+                    "DESTRUCTOR ESTELAR  /  B: bomba"
                 } else {
                     "CARRO  /  1x  /  fm: radio"
                 },

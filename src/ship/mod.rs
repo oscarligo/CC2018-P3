@@ -3,6 +3,8 @@ pub(crate) mod alien_audio;
 mod audio;
 mod camera;
 pub(crate) mod commands;
+pub(crate) mod doomsday;
+mod doomsday_audio;
 mod effects;
 mod impact;
 mod input;
