@@ -319,6 +319,7 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
+- `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.
 - Toda la imagen usa píxeles ampliados y un filtro CRT retro con scanlines, rejilla de fósforo, viñeta y esquinas curvas, incluida la interfaz.
 - `A` / `D`: girar a izquierda / derecha respecto a la nave.
 - `Q` / `E`: inclinarse y acompañar el giro.

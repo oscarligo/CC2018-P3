@@ -176,7 +176,10 @@ impl Framebuffer {
         bottom_margin: i32,
         draw_ui: impl FnOnce(&mut RaylibDrawHandle),
     ) {
-        self.prepare_display_pixels();
+        let crt_enabled = crate::display::crt_enabled();
+        if crt_enabled {
+            self.prepare_display_pixels();
+        }
         if self.texture.is_none() {
             let image = Image::gen_image_color(
                 self.width as i32,
@@ -188,7 +191,12 @@ impl Framebuffer {
         let Some(texture) = &mut self.texture else {
             return;
         };
-        if texture.update_texture(&self.display_pixels).is_err() {
+        let display = if crt_enabled {
+            &self.display_pixels
+        } else {
+            &self.pixels
+        };
+        if texture.update_texture(display).is_err() {
             return;
         }
 
@@ -250,7 +258,9 @@ impl Framebuffer {
             }
         }
         draw_ui(&mut renderer);
-        draw_crt_overlay(&mut renderer, self.width as i32, self.height as i32);
+        if crt_enabled {
+            draw_crt_overlay(&mut renderer, self.width as i32, self.height as i32);
+        }
     }
 }
 
