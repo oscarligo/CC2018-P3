@@ -21,6 +21,7 @@ use scene::{Starfield, build_solar_system};
 use ship::{InputState, RocketAudio, ShipMovement};
 use ship::{
     alien_audio::AlienAudio,
+    ambient_audio::AmbientAudio,
     car_weapons::CarWeapons,
     commands::{Command, CommandReader},
     doomsday::{Controls as WeaponControls, Doomsday, DoomsdayAudio},
@@ -133,6 +134,7 @@ fn main() {
             // Each departure owns its audio and transient state; returning drops them all.
             let mut rocket_audio = RocketAudio::new(&audio);
             let mut alien_audio = AlienAudio::new(&audio);
+            let mut ambient_audio = AmbientAudio::new(&audio);
             let mut performance = PerformanceMonitor::default();
             let mut interaction = InteractionSystem::default();
             while window.get_char_pressed().is_some() {}
@@ -328,6 +330,12 @@ fn main() {
                     audio.update(&weapon, &weapon_cues, frame_time);
                 }
                 let radio_active = radio.as_ref().is_some_and(CarRadio::is_playing);
+                ambient_audio.update(
+                    &world,
+                    movement.position(),
+                    radio.as_ref().is_some_and(CarRadio::visible),
+                    frame_time,
+                );
                 let effects_gain = rocket_audio.set_radio_active(radio_active, frame_time);
                 alien_audio.set_impact_gain(effects_gain);
                 alien_audio.set_paused(travel.open);

@@ -164,7 +164,7 @@ impl CarWeapons {
         });
     }
 
-    fn damage_sun(&mut self, hit: Vector3, world: &World) {
+    fn damage_sun(&mut self, hit: Vector3, world: &mut World) {
         self.sun_damage += 1;
         if self.sun_damage < SUN_HEALTH {
             return;
@@ -172,6 +172,7 @@ impl CarWeapons {
         let (center, radius) = world
             .primary_light_bounds()
             .unwrap_or((hit, self.radius * 20.0));
+        world.destruction_count += 1;
         self.solar_explosion(center, radius);
         self.bolts.clear();
         self.finale_time = Some(0.0);

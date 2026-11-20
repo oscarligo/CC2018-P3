@@ -1,5 +1,6 @@
 pub(crate) mod alien;
 pub(crate) mod alien_audio;
+pub(crate) mod ambient_audio;
 mod audio;
 mod camera;
 pub(crate) mod car_weapons;
