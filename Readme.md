@@ -34,6 +34,10 @@ La franja inferior muestra cuántos planetas quedan respecto al total inicial y 
 velocidad actual. La barra del velocímetro usa una escala logarítmica para conservar
 detalle incluso cuando el carro acumula velocidades muy superiores a la inicial.
 
+Cuando el carro destruye todos los planetas, sus láseres pueden dañar también el Sol.
+Al destruirlo se produce una explosión solar, la pantalla queda cubierta por un destello
+blanco y el sistema se reinicia antes de regresar al hangar.
+
 ### Destructor Estelar y bomba planetaria
 
 Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local

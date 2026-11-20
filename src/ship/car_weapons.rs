@@ -16,6 +16,8 @@ const RED: Vector3 = Vector3 {
 const RANGE: f32 = 100_000.0;
 const MAX_EXPLOSION_PARTICLES: usize = 360;
 const PLANET_HEALTH: u16 = 24;
+const SUN_HEALTH: u16 = 48;
+const SUN_FINALE_DURATION: f32 = 2.0;
 const MAX_CRACKS: usize = 144;
 
 struct Bolt {
@@ -32,6 +34,7 @@ struct ExplosionParticle {
     life: f32,
     size: f32,
     hot: bool,
+    solar: bool,
 }
 
 struct Crack {
@@ -51,6 +54,8 @@ pub struct CarWeapons {
     impact_cooldown: f32,
     damage: HashMap<ObjectId, u16>,
     cracks: Vec<Crack>,
+    sun_damage: u16,
+    finale_time: Option<f32>,
 }
 
 impl CarWeapons {
@@ -66,6 +71,8 @@ impl CarWeapons {
             impact_cooldown: 0.0,
             damage: HashMap::new(),
             cracks: Vec::with_capacity(MAX_CRACKS),
+            sun_damage: 0,
+            finale_time: None,
         }
     }
 
@@ -78,6 +85,9 @@ impl CarWeapons {
         forward: Vector3,
         world: &mut World,
     ) -> bool {
+        if let Some(time) = &mut self.finale_time {
+            *time += dt;
+        }
         self.impact_cooldown = (self.impact_cooldown - dt).max(0.0);
         for bolt in &mut self.bolts {
             bolt.origin = muzzles[bolt.side];
@@ -97,6 +107,10 @@ impl CarWeapons {
         } else {
             self.hold_time = 0.0;
             self.continuous = false;
+        }
+
+        if self.finale_time.is_some() {
+            return false;
         }
 
         let mut sound = false;
@@ -135,9 +149,11 @@ impl CarWeapons {
         let hit = world.raycast(ray, RANGE);
         let end = hit.map_or(muzzle + ray.direction * RANGE, |hit| hit.position);
         if explode && let Some(hit) = hit {
+            self.explosion(hit.position, ray.direction);
             if let Some(target) = world.target_by_id(hit.object_id) {
-                self.explosion(hit.position, ray.direction);
                 self.damage_planet(target, hit.position, world);
+            } else if world.travel_targets().is_empty() && world.is_primary_light(hit.object_id) {
+                self.damage_sun(hit.position, world);
             }
         }
         self.bolts.push(Bolt {
@@ -146,6 +162,19 @@ impl CarWeapons {
             end,
             life: 0.12,
         });
+    }
+
+    fn damage_sun(&mut self, hit: Vector3, world: &World) {
+        self.sun_damage += 1;
+        if self.sun_damage < SUN_HEALTH {
+            return;
+        }
+        let (center, radius) = world
+            .primary_light_bounds()
+            .unwrap_or((hit, self.radius * 20.0));
+        self.solar_explosion(center, radius);
+        self.bolts.clear();
+        self.finale_time = Some(0.0);
     }
 
     fn damage_planet(
@@ -213,6 +242,28 @@ impl CarWeapons {
                 life,
                 size,
                 hot: index % 3 != 0,
+                solar: false,
+            });
+        }
+    }
+
+    fn solar_explosion(&mut self, position: Vector3, radius: f32) {
+        self.particles.clear();
+        for index in 0..MAX_EXPLOSION_PARTICLES {
+            let y = self.random() * 2.0 - 1.0;
+            let angle = self.random() * TAU;
+            let radial = (1.0 - y * y).sqrt();
+            let direction = Vector3::new(radial * angle.cos(), y, radial * angle.sin());
+            let speed = radius * (1.5 + self.random() * 5.0);
+            let size = radius * (0.08 + self.random() * 0.12);
+            self.particles.push(ExplosionParticle {
+                position,
+                velocity: direction * speed,
+                age: 0.0,
+                life: SUN_FINALE_DURATION,
+                size,
+                hot: index % 4 != 0,
+                solar: true,
             });
         }
     }
@@ -264,11 +315,16 @@ impl CarWeapons {
                 continue;
             };
             let remaining = (1.0 - particle.age / particle.life).max(0.0);
-            let size = (particle.size / depth * framebuffer.height as f32).clamp(1.0, 18.0);
+            let max_size = if particle.solar { 120.0 } else { 18.0 };
+            let size = (particle.size / depth * framebuffer.height as f32).clamp(1.0, max_size);
             let color = if particle.hot {
-                Vector3::new(1.0, 0.28, 0.03)
+                if particle.solar {
+                    Vector3::new(1.0, 0.82, 0.32)
+                } else {
+                    Vector3::new(1.0, 0.28, 0.03)
+                }
             } else {
-                Vector3::new(0.75, 0.04, 0.02)
+                Vector3::new(1.0, 0.12, 0.01)
             };
             glow(framebuffer, position, depth, size, color, remaining * 0.8);
         }
@@ -295,6 +351,27 @@ impl CarWeapons {
         ] {
             drawing.draw_line(x1, y1, x2, y2, color);
         }
+    }
+
+    pub fn draw_finale(&self, drawing: &mut RaylibDrawHandle) {
+        let Some(time) = self.finale_time else {
+            return;
+        };
+        let flash = ((time - 0.25) / 1.15).clamp(0.0, 1.0);
+        let orange = ((time / 0.65).clamp(0.0, 1.0) * (1.0 - flash) * 190.0) as u8;
+        drawing.draw_rectangle(0, 0, 800, 600, Color::new(255, 76, 8, orange));
+        drawing.draw_rectangle(
+            0,
+            0,
+            800,
+            600,
+            Color::new(255, 255, 255, (flash * 255.0) as u8),
+        );
+    }
+
+    pub fn finale_complete(&self) -> bool {
+        self.finale_time
+            .is_some_and(|time| time >= SUN_FINALE_DURATION)
     }
 }
 
@@ -401,5 +478,51 @@ mod tests {
         assert!(world.target_by_id(planet).is_none());
         assert!(!weapons.damage.contains_key(&planet));
         assert!(weapons.cracks.iter().all(|crack| crack.planet != planet));
+    }
+
+    #[test]
+    fn sun_only_explodes_after_all_planets_are_gone() {
+        let mut world = World::new();
+        world.add(CelestialBody::new_primary_star(Vector3::new(0.0, 0.0, 80.0)).with_scale(8.0));
+        let planet = world.add(
+            CelestialBody::new(CelestialKind::Rocky, Vector3::new(40.0, 0.0, 80.0))
+                .named("Último planeta")
+                .with_scale(8.0),
+        );
+        let mut weapons = CarWeapons::new(2.0);
+        let muzzles = [Vector3::new(-1.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0)];
+        for _ in 0..SUN_HEALTH {
+            weapons.update(
+                0.13,
+                true,
+                false,
+                muzzles,
+                Vector3::new(0.0, 0.0, 1.0),
+                &mut world,
+            );
+        }
+        assert!(weapons.finale_time.is_none());
+
+        world.destroy_planet(planet);
+        for _ in 0..SUN_HEALTH {
+            weapons.update(
+                0.13,
+                true,
+                false,
+                muzzles,
+                Vector3::new(0.0, 0.0, 1.0),
+                &mut world,
+            );
+        }
+        assert!(weapons.finale_time.is_some());
+        weapons.update(
+            SUN_FINALE_DURATION,
+            false,
+            false,
+            muzzles,
+            Vector3::zero(),
+            &mut world,
+        );
+        assert!(weapons.finale_complete());
     }
 }

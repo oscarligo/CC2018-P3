@@ -417,8 +417,18 @@ fn main() {
                             );
                         }
                         draw_hangar_return(d);
+                        if let Some(car_weapons) = &car_weapons {
+                            car_weapons.draw_finale(d);
+                        }
                     },
                 );
+                if car_weapons
+                    .as_ref()
+                    .is_some_and(CarWeapons::finale_complete)
+                {
+                    world = build_solar_system();
+                    continue 'hangar;
+                }
                 let mut metrics = renderer.metrics();
                 metrics.update = update_time;
                 metrics.frame = frame_start.elapsed();
