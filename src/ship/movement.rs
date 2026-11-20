@@ -51,6 +51,7 @@ pub struct ShipMovement {
     acceleration: f32,
     deceleration: f32,
     brake_deceleration: f32,
+    unbounded_thrust: bool,
 }
 
 impl ShipMovement {
@@ -64,8 +65,17 @@ impl ShipMovement {
         self.acceleration = self.max_speed / acceleration_duration.max(MIN_ACCELERATION_DURATION);
         self.deceleration = self.max_speed * SPACE_DRAG_DECEL_FACTOR;
         self.brake_deceleration = self.max_speed * BRAKE_DECEL_FACTOR;
+        self.unbounded_thrust = false;
         self.effects.set_alien(alien);
         self.alien = alien.then(|| super::alien::AlienFlight::new(base_radius));
+    }
+
+    pub fn configure_unbounded_car_thrust(&mut self) {
+        self.unbounded_thrust = true;
+        self.max_speed *= 2.0;
+        self.acceleration *= 2.0;
+        self.deceleration *= 2.0;
+        self.brake_deceleration *= 2.0;
     }
 
     pub fn new(mesh: &Mesh, acceleration_duration: f32) -> Self {
@@ -137,6 +147,7 @@ impl ShipMovement {
             acceleration: max_speed / acceleration_duration.max(MIN_ACCELERATION_DURATION),
             deceleration: max_speed * SPACE_DRAG_DECEL_FACTOR,
             brake_deceleration: max_speed * BRAKE_DECEL_FACTOR,
+            unbounded_thrust: false,
         }
     }
 
@@ -287,6 +298,9 @@ impl ShipMovement {
     }
 
     pub fn can_accelerate(&self) -> bool {
+        if self.unbounded_thrust && self.local.is_none() {
+            return true;
+        }
         let limit = self
             .local
             .as_ref()

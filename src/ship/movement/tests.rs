@@ -192,6 +192,29 @@ fn saucer_acceleration_and_top_speed_are_three_times_the_car() {
 }
 
 #[test]
+fn car_thrust_keeps_accelerating_without_a_frame_rate_dependent_limit() {
+    let car = Vehicle::car();
+    let simulate = |fps: usize| {
+        let mut ship = ShipMovement::new(&car.mesh, 2.0);
+        ship.configure_vehicle(car.radius, 2.0, false);
+        ship.configure_unbounded_car_thrust();
+        let initial_limit = ship.max_speed;
+        for _ in 0..fps * 30 {
+            ship.update_motion(true, false, false, 1.0 / fps as f32);
+        }
+        assert!(ship.can_accelerate());
+        assert!(ship.speed > initial_limit * 10.0);
+        ship.speed
+    };
+
+    let speed_30 = simulate(30);
+    let speed_60 = simulate(60);
+    let speed_144 = simulate(144);
+    assert!((speed_30 - speed_60).abs() / speed_60 < 0.0001);
+    assert!((speed_60 - speed_144).abs() / speed_144 < 0.0001);
+}
+
+#[test]
 fn every_planet_has_a_safe_jump_after_orbiting() {
     let mut world = crate::scene::build_solar_system();
     world.update(&crate::scene::world::WorldUpdate { frame_time: 51.0 });

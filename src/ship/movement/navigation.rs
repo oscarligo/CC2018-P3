@@ -40,7 +40,15 @@ impl ShipMovement {
             return;
         }
         if braking {
-            self.speed = (self.speed - self.brake_deceleration * frame_time).max(0.0);
+            let deceleration = if self.unbounded_thrust {
+                self.brake_deceleration.max(self.speed * 1.5)
+            } else {
+                self.brake_deceleration
+            };
+            self.speed = (self.speed - deceleration * frame_time).max(0.0);
+        } else if self.unbounded_thrust && (thrust || boost) {
+            let acceleration = self.acceleration * if boost { 2.2 } else { 1.0 };
+            self.speed += acceleration * frame_time;
         } else if boost {
             self.speed = move_towards(
                 self.speed,

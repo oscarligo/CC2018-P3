@@ -168,6 +168,9 @@ fn main() {
                 rocket_audio.moving_duration(),
                 vehicle.kind == VehicleKind::Saucer,
             );
+            if vehicle.kind == VehicleKind::Car {
+                movement.configure_unbounded_car_thrust();
+            }
             movement.update(&InputState::read(&window), 0.0, &mut uniforms, &world);
 
             while !window.window_should_close() {

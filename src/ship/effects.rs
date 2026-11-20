@@ -27,7 +27,8 @@ const EXHAUST_CLOSE_MAX_DENSITY: f32 = 1.55;
 
 const CORE_LIFETIME: f32 = 0.14;
 const PLUME_LIFETIME: f32 = 0.65;
-const SPARK_LIFETIME: f32 = 0.34;
+const SPARK_LIFETIME: f32 = 0.48;
+const WAKE_VELOCITY_INHERITANCE: f32 = 0.72;
 
 const CORE_EXIT_SPEED: f32 = 2.4;
 const PLUME_EXIT_SPEED: f32 = 2.85;
@@ -691,7 +692,7 @@ impl ShipEffects {
                 * (1.0 - radial_dist * 0.18);
             let lateral_x = (disk_x * 0.55 + self.next_rand_bipolar() * 0.45) * spread;
             let lateral_y = (disk_y * 0.55 + self.next_rand_bipolar() * 0.45) * spread;
-            let velocity = ship_velocity
+            let velocity = ship_velocity * WAKE_VELOCITY_INHERITANCE
                 + backward * exit_speed
                 + right * (lateral_x * self.ship_radius)
                 + up * (lateral_y * self.ship_radius);
@@ -780,7 +781,7 @@ impl ShipEffects {
                 * SPARK_EXIT_SPEED
                 * thrust_vel_scale
                 * (0.7 + self.next_rand_f32() * 0.65);
-            let velocity = ship_velocity
+            let velocity = ship_velocity * WAKE_VELOCITY_INHERITANCE
                 + backward * speed
                 + right * (self.next_rand_bipolar() * self.ship_radius * 1.15)
                 + up * (self.next_rand_bipolar() * self.ship_radius * 1.15);
