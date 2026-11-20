@@ -26,6 +26,7 @@ pub struct Vehicle {
     glass_colors: Vec<Vector3>,
     glass_alphas: Vec<f32>,
     bay: Option<destroyer_model::WeaponBay>,
+    engines: Option<destroyer_model::EngineLights>,
     pub weapon_charge: f32,
     pub weapon_open: f32,
     pub bomb_visible: bool,
@@ -61,6 +62,7 @@ impl Vehicle {
             glass_colors: Vec::new(),
             glass_alphas: Vec::new(),
             bay: None,
+            engines: None,
             weapon_charge: 0.0,
             weapon_open: 0.0,
             bomb_visible: true,
@@ -90,6 +92,7 @@ impl Vehicle {
             glass_colors,
             glass_alphas,
             bay: None,
+            engines: None,
             weapon_charge: 0.0,
             weapon_open: 0.0,
             bomb_visible: true,
@@ -116,6 +119,7 @@ impl Vehicle {
             glass_colors: vec![],
             glass_alphas: vec![],
             bay: Some(destroyer_model::WeaponBay::new(scale)),
+            engines: Some(destroyer_model::EngineLights::new(scale)),
             weapon_charge: 0.0,
             weapon_open: 0.0,
             bomb_visible: true,
@@ -170,7 +174,11 @@ impl Vehicle {
             let emissive = v.alpha > 1.5;
             self.colors[i] = if emissive {
                 v.color
-                    * if self.kind == VehicleKind::Destroyer && v.color.x > v.color.z * 1.5 {
+                    * if self.kind == VehicleKind::Destroyer && v.color.z > 0.99 && v.color.y > 0.75
+                    {
+                        // The lit cyan exhaust remains bright even between energy pulses.
+                        1.06 + 0.025 * (time * 5.0 + v.position.x * 0.3).sin()
+                    } else if self.kind == VehicleKind::Destroyer && v.color.x > v.color.z * 1.5 {
                         0.15 + self.weapon_charge
                             * (0.85 + 0.20 * (time * (5.0 + 15.0 * self.weapon_charge)).sin())
                     } else {
@@ -192,6 +200,9 @@ impl Vehicle {
                 self.bomb_visible,
                 time,
             );
+        }
+        if let Some(engines) = &self.engines {
+            engines.draw(fb, u, time);
         }
         if let Some(glass) = &self.glass {
             for (i, v) in glass.vertices.iter().enumerate() {

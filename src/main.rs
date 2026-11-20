@@ -415,6 +415,36 @@ fn preview_ships() {
         fb.save_png(format!("target/previews/{name}.png"))
             .expect("guardar captura");
         println!("target/previews/{name}.png");
+        if vehicle.kind == VehicleKind::Destroyer {
+            for (name, camera_pos, camera_target) in [
+                (
+                    "destroyer-engines",
+                    Vector3::new(0., -vehicle.radius * 0.10, -vehicle.radius * 1.60),
+                    Vector3::new(0., -vehicle.radius * 0.10, 0.),
+                ),
+                (
+                    "destroyer-engines-angle",
+                    Vector3::new(
+                        vehicle.radius * 1.05,
+                        vehicle.radius * 0.45,
+                        -vehicle.radius * 2.1,
+                    ),
+                    Vector3::new(0., -vehicle.radius * 0.12, -vehicle.radius * 0.20),
+                ),
+            ] {
+                let u = Uniforms {
+                    camera_pos,
+                    camera_target,
+                    ..vehicle.preview_uniforms(0.)
+                };
+                fb.clear();
+                renderer.begin_frame();
+                vehicle.draw(&mut renderer, &mut fb, &u, 0.);
+                fb.save_png(format!("target/previews/{name}.png"))
+                    .expect("guardar motores");
+                println!("target/previews/{name}.png");
+            }
+        }
     }
 }
 

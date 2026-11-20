@@ -19,6 +19,59 @@ pub(super) fn geometry() -> Mesh {
     asset("assets/star_destroyer.obj")
 }
 
+pub(super) struct EngineLights {
+    sources: [(Vector3, f32); 7],
+}
+
+impl EngineLights {
+    pub(super) fn new(scale: f32) -> Self {
+        // Centers and mouth radii correspond to tools/build_destroyer_engines.py.
+        let layout = [
+            (-1.95, -0.13, 0.51),
+            (0.0, -0.13, 0.55),
+            (1.95, -0.13, 0.51),
+            (-0.98, 0.30, 0.255),
+            (-0.98, -0.44, 0.255),
+            (0.98, 0.30, 0.255),
+            (0.98, -0.44, 0.255),
+        ];
+        Self {
+            sources: layout.map(|(x, y, r)| (Vector3::new(x, y, -3.76) * scale, r * 0.69 * scale)),
+        }
+    }
+
+    pub(super) fn draw(&self, fb: &mut Framebuffer, u: &Uniforms, time: f32) {
+        use crate::rendering::projection::{project_vertex, projected_sphere_radius};
+        let aft = super::direction(&u.model_matrix, Vector3::new(0., 0., -1.)).normalize();
+        for (local, radius) in self.sources {
+            let position = super::point(&u.model_matrix, local);
+            let facing = aft.dot((u.camera_pos - position).normalize()).max(0.);
+            if facing < 0.08 {
+                continue;
+            }
+            if let Some((p, depth)) = project_vertex(
+                position,
+                u.camera_pos,
+                u.camera_target,
+                u.camera_up,
+                fb.width as f32,
+                fb.height as f32,
+            ) {
+                let pixels =
+                    (projected_sphere_radius(position, radius, u, fb.height) * 1.5).clamp(1., 90.);
+                crate::ship::alien::glow(
+                    fb,
+                    p,
+                    depth,
+                    pixels,
+                    Vector3::new(0.30, 0.83, 1.),
+                    0.18 * facing * facing * (1. + 0.025 * (time * 5. + local.x).sin()),
+                );
+            }
+        }
+    }
+}
+
 pub(super) struct WeaponBay {
     door: Mesh,
     bomb: Mesh,
