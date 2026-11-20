@@ -321,6 +321,8 @@ Los fragmentos lejanos pierden contraste progresivamente y se mezclan con el fon
 
 El campo estelar está distribuido en tres capas de profundidad. Al trasladarse la cámara, las estrellas cercanas se desplazan más que las lejanas y producen parallax.
 
+Las superficies iluminadas reciben una luz de borde sutil en sus siluetas para separar mejor los volúmenes del fondo sin alterar el color base.
+
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
 - `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.
