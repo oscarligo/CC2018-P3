@@ -317,6 +317,8 @@ Las capturas y muestras de audio quedan en `target/previews/`.
 
 La nave recorre el espacio siguiendo su orientación y la cámara mantiene su centro a la vista, incluso durante giros completos o vuelo invertido. Los objetos conservan sus posiciones en el mundo: al acercarte aumentan de tamaño y al pasar a su lado se desplazan en pantalla.
 
+Los fragmentos lejanos pierden contraste progresivamente y se mezclan con el fondo entre 2 500 y 14 000 unidades, aportando perspectiva atmosférica sin alterar los objetos cercanos.
+
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
 - `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.

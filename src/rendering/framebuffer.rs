@@ -15,6 +15,14 @@ pub struct Framebuffer {
 }
 
 impl Framebuffer {
+    pub(crate) fn background_rgb(&self) -> Vector3 {
+        Vector3::new(
+            self.background_color.r as f32 / COLOR_CHANNEL_MAX,
+            self.background_color.g as f32 / COLOR_CHANNEL_MAX,
+            self.background_color.b as f32 / COLOR_CHANNEL_MAX,
+        )
+    }
+
     pub(crate) fn save_png(
         &self,
         path: impl AsRef<std::path::Path>,
