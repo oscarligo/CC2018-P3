@@ -326,6 +326,7 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 - `R` (ovni): girar sobre su eje, de forma independiente a la aceleración.
 - Clic izquierdo en `mishmish`: un disparo por pulsación.
 - `Shift izquierdo`: frenar.
+- El carro lleva faros delanteros encendidos sin haces, luces traseras encendidas y luz tenue azul verdosa desde los controles del tablero hacia la cabina. Al frenar con `Shift izquierdo`, las luces traseras aumentan su intensidad.
 - Clic derecho + movimiento del ratón: orbitar la cámara alrededor de la nave.
 - Rueda del ratón: zoom. Mover el cursor sin botones no dirige la nave.
 

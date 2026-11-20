@@ -5,6 +5,8 @@ use crate::rendering::{
 };
 use raylib::prelude::*;
 use std::f32::consts::{PI, TAU};
+#[path = "car_lights.rs"]
+mod car_lights;
 #[path = "destroyer_model.rs"]
 mod destroyer_model;
 
@@ -16,6 +18,7 @@ pub enum VehicleKind {
 }
 
 pub struct Vehicle {
+    pub braking: bool,
     pub kind: VehicleKind,
     pub mesh: Mesh,
     glass: Option<Mesh>,
@@ -51,14 +54,16 @@ impl Vehicle {
         let mesh = crate::rendering::load_objects::load_obj("assets/red_car.obj")
             .expect("No se pudo cargar assets/red_car.obj");
         let (center, radius) = bounds(&mesh);
+        let colors = vec![Vector3::one(); mesh.vertices.len()];
         Self {
+            braking: false,
             kind: VehicleKind::Car,
             mesh,
             glass: None,
             radius,
             muzzle: None,
             center,
-            colors: Vec::new(),
+            colors,
             glass_colors: Vec::new(),
             glass_alphas: Vec::new(),
             bay: None,
@@ -82,6 +87,7 @@ impl Vehicle {
         let glass_colors = vec![Vector3::zero(); glass.vertices.len()];
         let glass_alphas = vec![0.0; glass.vertices.len()];
         Self {
+            braking: false,
             kind: VehicleKind::Saucer,
             mesh,
             glass: Some(glass),
@@ -109,6 +115,7 @@ impl Vehicle {
         let (center, radius) = bounds(&mesh);
         let colors = vec![Vector3::zero(); mesh.vertices.len()];
         Self {
+            braking: false,
             kind: VehicleKind::Destroyer,
             mesh,
             glass: None,
@@ -158,7 +165,14 @@ impl Vehicle {
 
     pub fn draw(&mut self, renderer: &mut Renderer, fb: &mut Framebuffer, u: &Uniforms, time: f32) {
         if self.kind == VehicleKind::Car {
-            renderer.render_lit(fb, u, &self.mesh);
+            for (color, vertex) in self.colors.iter_mut().zip(&self.mesh.vertices) {
+                *color = crate::rendering::shaders::lit_vertex_shader(vertex, u).color;
+                car_lights::illuminate(vertex, color);
+            }
+            renderer.render_colored_shaded(fb, u, &self.mesh, &self.colors, |fragment| {
+                car_lights::shade(fragment, &self.mesh.materials, self.braking)
+            });
+            car_lights::draw(fb, u);
             return;
         }
         let eye = u.camera_pos;

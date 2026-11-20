@@ -338,6 +338,7 @@ fn main() {
                 starfield.draw(&mut framebuffer, &draw_uniforms);
                 world.draw(&mut renderer, &mut framebuffer, &draw_uniforms);
 
+                vehicle.braking = input.braking;
                 vehicle.draw(&mut renderer, &mut framebuffer, &draw_uniforms, elapsed);
                 movement.draw_trail(&mut framebuffer, &draw_uniforms);
                 movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
@@ -417,6 +418,26 @@ fn preview_ships() {
         fb.save_png(format!("target/previews/{name}.png"))
             .expect("guardar captura");
         println!("target/previews/{name}.png");
+        if vehicle.kind == VehicleKind::Car {
+            for (name, angle, braking) in [
+                ("car-lights-rear", 0.25, false),
+                ("car-lights-braking", 0.25, true),
+                ("car-lights-front", 2.65, false),
+            ] {
+                vehicle.braking = braking;
+                fb.clear();
+                renderer.begin_frame();
+                vehicle.draw(
+                    &mut renderer,
+                    &mut fb,
+                    &vehicle.preview_uniforms(angle),
+                    0.0,
+                );
+                fb.save_png(format!("target/previews/{name}.png"))
+                    .expect("guardar luces del carro");
+            }
+            vehicle.braking = false;
+        }
         if vehicle.kind == VehicleKind::Destroyer {
             for (name, camera_pos, camera_target) in [
                 (

@@ -156,8 +156,11 @@ impl Renderer {
         mesh: &Mesh,
         shader: impl Fn(SurfacePoint) -> Vector3,
     ) {
-        let shade =
-            |fragment: &Fragment| shader(fragment.surface.expect("surface attributes requested"));
+        let shade = |fragment: &Fragment| {
+            Some(shader(
+                fragment.surface.expect("surface attributes requested"),
+            ))
+        };
         self.render_internal(
             framebuffer,
             uniforms,
@@ -169,6 +172,26 @@ impl Renderer {
         );
     }
 
+    pub fn render_colored_shaded(
+        &mut self,
+        framebuffer: &mut Framebuffer,
+        uniforms: &Uniforms,
+        mesh: &Mesh,
+        colors: &[Vector3],
+        shader: impl Fn(&Fragment) -> Option<Vector3>,
+    ) {
+        assert_eq!(colors.len(), mesh.vertices.len());
+        self.render_internal(
+            framebuffer,
+            uniforms,
+            mesh,
+            Some(colors),
+            None,
+            RenderMode::Opaque,
+            Some(&shader),
+        );
+    }
+
     fn render_internal(
         &mut self,
         framebuffer: &mut Framebuffer,
@@ -177,7 +200,7 @@ impl Renderer {
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
         mode: RenderMode,
-        surface_shader: Option<&dyn Fn(&Fragment) -> Vector3>,
+        surface_shader: Option<&dyn Fn(&Fragment) -> Option<Vector3>>,
     ) {
         let transparent = mode == RenderMode::Transparent;
         let width = framebuffer.width as f32;
@@ -242,7 +265,7 @@ impl Renderer {
                 }
                 let color = surface_shader.map_or_else(
                     || fragment_shader(&fragment, &mesh.materials),
-                    |shader| Some(shader(&fragment)),
+                    |shader| shader(&fragment),
                 );
                 let Some(color) = color else {
                     return;

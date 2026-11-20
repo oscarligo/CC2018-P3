@@ -262,6 +262,8 @@ mod tests {
     fn emitted_light_adds_color_respects_depth_and_does_not_occlude() {
         let mut fb = Framebuffer::new(1, 1, Color::BLACK);
         fb.point(0, 0, 2.0, Vector3::new(0.2, 0.2, 0.2));
+        fb.add_light(0, 0, 1.0, Vector3::zero(), 1.0);
+        assert_eq!(&fb.pixels[..4], &[51, 51, 51, 255]);
         fb.add_light(0, 0, 1.0, Vector3::new(0., 1., 0.), 0.8);
         assert_eq!(&fb.pixels[..4], &[51, 255, 51, 255]);
         fb.add_light(0, 0, 3.0, Vector3::new(1., 0., 0.), 1.0);
