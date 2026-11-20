@@ -329,6 +329,8 @@ Al usar el propulsor, las chispas conservan menos velocidad que la nave y forman
 
 El carro comienza con el doble de velocidad y, en el espacio, continúa acelerando sin un límite rígido mientras se mantenga el propulsor. El freno aumenta su fuerza a velocidades extremas para conservar el control.
 
+El carro dispone de una mira blanca fija. Cada clic dispara un láser rojo alternando entre ambos extremos delanteros; al mantenerlo presionado, los dos emisores forman haces continuos anclados al carro. La mira no selecciona planetas y los impactos producen una explosión de partículas sobre la superficie.
+
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
 - `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.

@@ -21,6 +21,7 @@ use scene::{Starfield, build_solar_system};
 use ship::{InputState, RocketAudio, ShipMovement};
 use ship::{
     alien_audio::AlienAudio,
+    car_weapons::CarWeapons,
     commands::{Command, CommandReader},
     doomsday::{Controls as WeaponControls, Doomsday, DoomsdayAudio},
     menu::{TravelMenu, choose_vehicle, draw_hangar_return, hangar_requested},
@@ -141,6 +142,9 @@ fn main() {
                 .expect("nave seleccionada");
             let is_destroyer = vehicle.kind == VehicleKind::Destroyer;
             let mut weapon = Doomsday::default();
+            let mut car_weapons =
+                (vehicle.kind == VehicleKind::Car).then(|| CarWeapons::new(vehicle.radius));
+            let car_muzzles = vehicle.car_laser_muzzles();
             let mut weapon_audio = is_destroyer.then(|| DoomsdayAudio::new(&audio));
             let mut travel = TravelMenu::default();
             let mut commands = CommandReader::default();
@@ -282,6 +286,7 @@ fn main() {
                     input.orbiting = false;
                     input.zoom_delta = 0.0;
                     input.firing = false;
+                    input.firing_held = false;
                 }
                 if weapon_blocked && let Some(target) = weapon.target.or(previous_target) {
                     movement.weapon_station(
@@ -298,6 +303,21 @@ fn main() {
                         &mut uniforms,
                         &world,
                     );
+                }
+                if let Some(car_weapons) = &mut car_weapons {
+                    let matrix = uniforms.model_matrix;
+                    let muzzles = car_muzzles.map(|point| model_point(&matrix, point));
+                    let forward = Vector3::new(matrix.m8, matrix.m9, matrix.m10).normalize();
+                    if car_weapons.update(
+                        frame_time,
+                        input.firing,
+                        input.firing_held,
+                        muzzles,
+                        forward,
+                        &world,
+                    ) {
+                        alien_audio.play(&[ship::alien::Cue::Laser]);
+                    }
                 }
                 vehicle.weapon_charge = weapon.charge;
                 vehicle.weapon_open = weapon.bay_open;
@@ -345,6 +365,9 @@ fn main() {
                 vehicle.draw(&mut renderer, &mut framebuffer, &draw_uniforms, elapsed);
                 movement.draw_trail(&mut framebuffer, &draw_uniforms);
                 movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
+                if let Some(car_weapons) = &car_weapons {
+                    car_weapons.draw(&mut framebuffer, &draw_uniforms);
+                }
                 let launch_origin = vehicle.muzzle.map_or(movement.position(), |p| {
                     model_point(&uniforms.model_matrix, p)
                 });
@@ -377,6 +400,11 @@ fn main() {
                         }
                         if is_destroyer && !travel.open {
                             weapon.draw_hud(d, aim, &draw_uniforms);
+                        }
+                        if let Some(car_weapons) = &car_weapons
+                            && !travel.open
+                        {
+                            car_weapons.draw_hud(d, &draw_uniforms);
                         }
                         draw_hangar_return(d);
                     },

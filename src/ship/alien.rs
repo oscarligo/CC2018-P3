@@ -605,7 +605,11 @@ pub(crate) fn beam(
             p,
             depth,
             width * 0.65,
-            Vector3::new(0.7, 1., 0.75),
+            Vector3::new(
+                (color.x + 0.65).min(1.0),
+                (color.y + 0.65).min(1.0),
+                (color.z + 0.65).min(1.0),
+            ),
             0.85,
         );
     }
