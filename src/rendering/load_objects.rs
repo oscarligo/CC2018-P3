@@ -17,6 +17,12 @@ pub struct Material {
     pub diffuse_texture: Option<RgbaImage>,
 }
 
+struct LoadedMaterial {
+    material: Material,
+    color: Vector3,
+    emissive: bool,
+}
+
 pub struct Mesh {
     pub vertices: Vec<Vertex>,
     pub indices: Vec<u32>,
@@ -36,6 +42,7 @@ pub fn load_obj(path: &str) -> Result<Mesh, Box<dyn std::error::Error>> {
     let mut materials = vec![Material {
         diffuse_texture: None,
     }];
+    let mut appearances = vec![(Vector3::one(), false)];
     let mut material_indices = HashMap::new();
     let mut current_material = 0;
     let mut line_buffer = String::with_capacity(LINE_BUFFER_CAPACITY);
@@ -72,9 +79,10 @@ pub fn load_obj(path: &str) -> Result<Mesh, Box<dyn std::error::Error>> {
                     let filename = parts.collect::<Vec<_>>().join(" ");
                     let mtl_path = obj_path.parent().unwrap_or(Path::new("")).join(filename);
                     if mtl_path.exists() {
-                        for (name, material) in load_mtl(&mtl_path)? {
+                        for (name, loaded) in load_mtl(&mtl_path)? {
                             material_indices.insert(name, materials.len());
-                            materials.push(material);
+                            materials.push(loaded.material);
+                            appearances.push((loaded.color, loaded.emissive));
                         }
                     }
                 }
@@ -83,11 +91,17 @@ pub fn load_obj(path: &str) -> Result<Mesh, Box<dyn std::error::Error>> {
                     current_material = material_indices.get(&name).copied().unwrap_or(0);
                 }
                 "f" => {
-                    let corners = parts
+                    let mut corners = parts
                         .map(|token| {
                             parse_corner(token, &positions, &tex_coords, &normals, current_material)
                         })
                         .collect::<Result<Vec<_>, Box<dyn std::error::Error>>>()?;
+                    let (color, emissive) = appearances[current_material];
+                    for vertex in &mut corners {
+                        vertex.color = color;
+                        // Existing authored vehicle shading uses this marker for emission.
+                        vertex.alpha = if emissive { 2.0 } else { 1.0 };
+                    }
                     for triangle in 1..corners.len().saturating_sub(1) {
                         for corner in [corners[0], corners[triangle], corners[triangle + 1]] {
                             indices.push(u32::try_from(vertices.len())?);
@@ -168,35 +182,77 @@ fn parse_obj_index(value: &str) -> Result<usize, Box<dyn std::error::Error>> {
     Ok(index.checked_sub(1).ok_or("OBJ indices start at 1")?)
 }
 
-fn load_mtl(path: &Path) -> Result<Vec<(String, Material)>, Box<dyn std::error::Error>> {
+fn load_mtl(path: &Path) -> Result<Vec<(String, LoadedMaterial)>, Box<dyn std::error::Error>> {
     let reader = BufReader::new(File::open(path)?);
     let mut materials = Vec::new();
     let mut current_name: Option<String> = None;
     let mut texture_path: Option<String> = None;
+    let mut diffuse = Vector3::one();
+    let mut emission = Vector3::zero();
 
-    let finish_material =
-        |materials: &mut Vec<(String, Material)>, name: Option<String>, texture: Option<String>| {
-            if let Some(name) = name {
-                let diffuse_texture = texture.and_then(|texture| {
-                    let path = path.parent().unwrap_or(Path::new("")).join(texture);
-                    image::open(path).ok().map(|image| image.to_rgba8())
-                });
-                materials.push((name, Material { diffuse_texture }));
-            }
-        };
+    let finish_material = |materials: &mut Vec<(String, LoadedMaterial)>,
+                           name: Option<String>,
+                           texture: Option<String>,
+                           diffuse: Vector3,
+                           emission: Vector3| {
+        if let Some(name) = name {
+            let diffuse_texture = texture.and_then(|texture| {
+                let path = path.parent().unwrap_or(Path::new("")).join(texture);
+                image::open(path).ok().map(|image| image.to_rgba8())
+            });
+            let emissive = emission.length_sqr() > 0.;
+            materials.push((
+                name,
+                LoadedMaterial {
+                    material: Material { diffuse_texture },
+                    color: if emissive { emission } else { diffuse },
+                    emissive,
+                },
+            ));
+        }
+    };
 
     for line in reader.lines() {
         let line = line?;
         let mut parts = line.split_whitespace();
         match parts.next() {
             Some("newmtl") => {
-                finish_material(&mut materials, current_name.take(), texture_path.take());
+                finish_material(
+                    &mut materials,
+                    current_name.take(),
+                    texture_path.take(),
+                    diffuse,
+                    emission,
+                );
                 current_name = Some(parts.collect::<Vec<_>>().join(" "));
+                diffuse = Vector3::one();
+                emission = Vector3::zero();
             }
             Some("map_Kd") => texture_path = Some(parts.collect::<Vec<_>>().join(" ")),
+            Some(property @ ("Kd" | "Ke")) => {
+                let channels = parts
+                    .take(3)
+                    .map(str::parse::<f32>)
+                    .collect::<Result<Vec<_>, _>>()?;
+                if channels.len() != 3 {
+                    return Err("MTL color requires three channels".into());
+                }
+                let color = Vector3::new(channels[0], channels[1], channels[2]);
+                if property == "Kd" {
+                    diffuse = color;
+                } else {
+                    emission = color;
+                }
+            }
             _ => {}
         }
     }
-    finish_material(&mut materials, current_name, texture_path);
+    finish_material(
+        &mut materials,
+        current_name,
+        texture_path,
+        diffuse,
+        emission,
+    );
     Ok(materials)
 }

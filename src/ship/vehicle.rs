@@ -5,11 +5,14 @@ use crate::rendering::{
 };
 use raylib::prelude::*;
 use std::f32::consts::{PI, TAU};
+#[path = "destroyer_model.rs"]
+mod destroyer_model;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum VehicleKind {
     Car,
     Saucer,
+    Destroyer,
 }
 
 pub struct Vehicle {
@@ -22,6 +25,10 @@ pub struct Vehicle {
     colors: Vec<Vector3>,
     glass_colors: Vec<Vector3>,
     glass_alphas: Vec<f32>,
+    bay: Option<destroyer_model::WeaponBay>,
+    pub weapon_charge: f32,
+    pub weapon_open: f32,
+    pub bomb_visible: bool,
 }
 
 pub fn bounds(mesh: &Mesh) -> (Vector3, f32) {
@@ -53,6 +60,10 @@ impl Vehicle {
             colors: Vec::new(),
             glass_colors: Vec::new(),
             glass_alphas: Vec::new(),
+            bay: None,
+            weapon_charge: 0.0,
+            weapon_open: 0.0,
+            bomb_visible: true,
         }
     }
 
@@ -78,10 +89,54 @@ impl Vehicle {
             colors,
             glass_colors,
             glass_alphas,
+            bay: None,
+            weapon_charge: 0.0,
+            weapon_open: 0.0,
+            bomb_visible: true,
+        }
+    }
+
+    pub fn destroyer(reference_radius: f32) -> Self {
+        let mut mesh = destroyer_model::geometry();
+        let (_, radius) = bounds(&mesh);
+        let scale = reference_radius * 1.35 / radius;
+        for v in &mut mesh.vertices {
+            v.position *= scale;
+        }
+        let (center, radius) = bounds(&mesh);
+        let colors = vec![Vector3::zero(); mesh.vertices.len()];
+        Self {
+            kind: VehicleKind::Destroyer,
+            mesh,
+            glass: None,
+            radius,
+            muzzle: Some(Vector3::new(0.0, -1.06, 1.0) * scale),
+            center,
+            colors,
+            glass_colors: vec![],
+            glass_alphas: vec![],
+            bay: Some(destroyer_model::WeaponBay::new(scale)),
+            weapon_charge: 0.0,
+            weapon_open: 0.0,
+            bomb_visible: true,
         }
     }
 
     pub fn preview_uniforms(&self, angle: f32) -> Uniforms {
+        if self.kind == VehicleKind::Destroyer {
+            return Uniforms {
+                model_matrix: Matrix::translate(-self.center.x, -self.center.y, -self.center.z)
+                    * Matrix::rotate_y(angle),
+                camera_pos: Vector3::new(self.radius * 1.60, self.radius * 1.1, self.radius * 1.9),
+                camera_target: Vector3::new(0.0, self.radius * 0.02, 0.0),
+                camera_up: Vector3::new(0.0, 1.0, 0.0),
+                light_position: Some(Vector3::new(
+                    self.radius * 3.0,
+                    self.radius * 6.0,
+                    self.radius * 2.0,
+                )),
+            };
+        }
         Uniforms {
             model_matrix: Matrix::translate(-self.center.x, -self.center.y, -self.center.z)
                 * Matrix::rotate_y(angle)
@@ -114,13 +169,30 @@ impl Vehicle {
             let rim = (1.0 - n.dot(view).abs()).powf(3.0);
             let emissive = v.alpha > 1.5;
             self.colors[i] = if emissive {
-                v.color * (0.88 + 0.12 * (time * 2.0).sin())
+                v.color
+                    * if self.kind == VehicleKind::Destroyer && v.color.x > v.color.z * 1.5 {
+                        0.15 + self.weapon_charge
+                            * (0.85 + 0.20 * (time * (5.0 + 15.0 * self.weapon_charge)).sin())
+                    } else {
+                        0.88 + 0.12 * (time * 2.0).sin()
+                    }
             } else {
                 v.color * (0.36 + diffuse * 0.72)
                     + Vector3::new(0.65, 0.83, 0.95) * (spec * 0.85 + rim * 0.12)
             };
         }
         renderer.render_colored(fb, u, &self.mesh, &self.colors);
+        if let Some(bay) = &mut self.bay {
+            bay.draw(
+                renderer,
+                fb,
+                u,
+                self.weapon_open,
+                self.weapon_charge,
+                self.bomb_visible,
+                time,
+            );
+        }
         if let Some(glass) = &self.glass {
             for (i, v) in glass.vertices.iter().enumerate() {
                 let n = direction(&u.model_matrix, v.normal).normalize();
@@ -519,6 +591,51 @@ fn compact(mut mesh: Mesh) -> Mesh {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn destroyer_geometry_is_bounded_finite_and_has_a_working_bay() {
+        let v = Vehicle::destroyer(10.);
+        assert!(v.mesh.materials.len() > 1);
+        assert!(
+            v.mesh
+                .vertices
+                .iter()
+                .any(|p| p.alpha > 1.5 && p.color.z > 0.8)
+        );
+        assert!(
+            v.mesh
+                .vertices
+                .iter()
+                .any(|p| p.alpha > 1.5 && p.color.x > 0.8)
+        );
+        assert!(
+            v.mesh
+                .vertices
+                .iter()
+                .any(|p| p.alpha == 1. && p.color.x < 0.5)
+        );
+        assert!((v.radius - 13.5).abs() < 0.001);
+        assert!(v.bay.is_some());
+        assert!(v.muzzle.is_some());
+        assert!(v.mesh.indices.len() / 3 < 20_000);
+        assert!(
+            v.mesh
+                .indices
+                .iter()
+                .all(|&i| (i as usize) < v.mesh.vertices.len())
+        );
+        assert!(v.mesh.vertices.iter().all(|p| {
+            [
+                p.position.x,
+                p.position.y,
+                p.position.z,
+                p.normal.x,
+                p.normal.y,
+                p.normal.z,
+            ]
+            .into_iter()
+            .all(f32::is_finite)
+        }));
+    }
     #[test]
     fn saucer_has_finite_geometry_and_encloses_the_pilot() {
         let v = Vehicle::saucer(10.0);
