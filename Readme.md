@@ -396,3 +396,5 @@ cargo run --release -- --benchmark
 cargo run --release -- --benchmark --objects 30
 cargo run --release -- --benchmark --objects 300
 ```
+
+Con el carro original, **N** marca un planeta al azar con la misma mira del destructor. Pulsa **N** para quitar la marca y otra vez para elegir otro planeta. La marca sigue al planeta durante su órbita.

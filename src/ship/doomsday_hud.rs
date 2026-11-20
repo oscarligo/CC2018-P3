@@ -9,30 +9,8 @@ impl Doomsday {
         let target = if self.busy() { self.target } else { aim };
         if let Some(t) = target
             && self.phase != Phase::Aftermath
-            && let Some((p, _)) = project_vertex(
-                t.position,
-                u.camera_pos,
-                u.camera_target,
-                u.camera_up,
-                800.,
-                600.,
-            )
         {
-            let r = projected_sphere_radius(t.position, t.radius, u, 600).clamp(24., 170.) + 12.;
-            if p.x + r > 0. && p.x - r < 800. && p.y + r > 0. && p.y - r < 600. {
-                let x = (p.x - r) as i32;
-                let y = (p.y - r) as i32;
-                let side = (r * 2.) as i32;
-                for (cx, cy, sx, sy) in [
-                    (x, y, 1, 1),
-                    (x + side, y, -1, 1),
-                    (x, y + side, 1, -1),
-                    (x + side, y + side, -1, -1),
-                ] {
-                    d.draw_line(cx, cy, cx + sx * 13, cy, red);
-                    d.draw_line(cx, cy, cx, cy + sy * 13, red);
-                }
-            }
+            draw_target_marker(d, t, u);
         }
         // Crosshair remains discoverable before a target can be locked.
         if self.phase == Phase::Idle {
@@ -192,6 +170,34 @@ impl Doomsday {
                 600,
                 Color::new(255, 201, 140, ((1. - self.timer / 0.35) * 95.) as u8),
             );
+        }
+    }
+}
+
+pub(crate) fn draw_target_marker(d: &mut RaylibDrawHandle, t: TravelTarget, u: &Uniforms) {
+    let red = Color::new(255, 119, 86, 255);
+    if let Some((p, _)) = project_vertex(
+        t.position,
+        u.camera_pos,
+        u.camera_target,
+        u.camera_up,
+        800.,
+        600.,
+    ) {
+        let r = projected_sphere_radius(t.position, t.radius, u, 600).clamp(24., 170.) + 12.;
+        if p.x + r > 0. && p.x - r < 800. && p.y + r > 0. && p.y - r < 600. {
+            let x = (p.x - r) as i32;
+            let y = (p.y - r) as i32;
+            let side = (r * 2.) as i32;
+            for (cx, cy, sx, sy) in [
+                (x, y, 1, 1),
+                (x + side, y, -1, 1),
+                (x, y + side, 1, -1),
+                (x + side, y + side, -1, -1),
+            ] {
+                d.draw_line(cx, cy, cx + sx * 13, cy, red);
+                d.draw_line(cx, cy, cx, cy + sy * 13, red);
+            }
         }
     }
 }

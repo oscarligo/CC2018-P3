@@ -145,6 +145,7 @@ fn main() {
                 .expect("nave seleccionada");
             let is_destroyer = vehicle.kind == VehicleKind::Destroyer;
             let mut weapon = Doomsday::default();
+            let mut planet_finder = ship::planet_finder::PlanetFinder::default();
             let mut car_weapons =
                 (vehicle.kind == VehicleKind::Car).then(|| CarWeapons::new(vehicle.radius));
             let car_muzzles = vehicle.car_laser_muzzles();
@@ -261,6 +262,12 @@ fn main() {
                 }
                 let weapon_blocked = was_weapon_busy || weapon.busy();
                 let blocked = was_open || travel.open || jump.is_some() || weapon_blocked;
+                if vehicle.kind == VehicleKind::Car
+                    && !blocked
+                    && window.is_key_pressed(KeyboardKey::KEY_N)
+                {
+                    planet_finder.toggle(&targets);
+                }
                 let mut input = if blocked {
                     InputState::default()
                 } else {
@@ -414,6 +421,7 @@ fn main() {
                             && !travel.open
                         {
                             car_weapons.draw_hud(d, &draw_uniforms);
+                            planet_finder.draw(d, &world, &draw_uniforms);
                         }
                         if !travel.open && !weapon_blocked {
                             draw_flight_status(

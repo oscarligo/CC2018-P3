@@ -13,6 +13,7 @@ mod input;
 mod local;
 pub(crate) mod menu;
 mod movement;
+pub(crate) mod planet_finder;
 pub(crate) mod radio;
 pub(crate) mod vehicle;
 
