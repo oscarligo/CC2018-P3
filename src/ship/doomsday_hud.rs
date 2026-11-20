@@ -118,13 +118,6 @@ impl Doomsday {
                 17,
                 muted,
             );
-            d.draw_text(
-                "Al 100 %: pregunta final con Sí, lanzar / Ay noooo",
-                40,
-                489,
-                13,
-                muted,
-            );
             d.draw_rectangle(
                 40,
                 507,

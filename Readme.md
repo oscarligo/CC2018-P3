@@ -126,16 +126,23 @@ El núcleo de Alfa Riddertal se calcula en una caché de sombreado alineada con
 la cámara, renovada en cada cuadro y muestreada durante la rasterización;
 la geometría, la proyección y la profundidad siguen en el pipeline propio.
 
-**L: activar/desactivar vuelo local**, disponible en el carro y en el ovni.
-Acércate primero a un planeta (también puedes usar `3.14` con el ovni).
-El modo toma el planeta más cercano como referencia, acompaña su traslación
-y orienta la nave tangencialmente a la superficie. **Espacio** mantiene el
-avance; sin subir ni bajar el morro, recorres la esfera conservando la altura.
-**W/S** permiten descender o ascender y **A/D** cambiar el rumbo. La velocidad
-se reduce progresivamente para explorar; **Shift** frena. No hay movimiento
-automático cuando estás detenido. Pulsa **L** de nuevo para salir conservando
-la posición y la velocidad. El teletransporte y `achu` abandonan el vuelo local;
-si te alejas mucho del planeta, recuperas el vuelo espacial automáticamente.
+**L: activar/desactivar sobrevuelo**, disponible en los tres vehículos.
+Acércate primero a un planeta (también puedes usar `3.14` con el ovni o el destructor).
+Al pulsar **L**, la nave se aproxima suavemente a una altura baja y comienza a rodear
+el planeta cercano, acompañando su órbita. No hace falta mantener una tecla para avanzar.
+La cámara conserva la vista habitual detrás de la nave, centrada en ella y un poco
+más cerca. El terreno y la curvatura se ven debajo y por delante durante el vuelo.
+La cámara mantiene su distancia respecto a la nave aunque el planeta sea grande.
+Al terminar la aproximación, el sobrevuelo conserva la altura.
+
+**Espacio** acelera el sobrevuelo; al soltarlo vuelve al crucero tranquilo.
+**Shift** frena hasta detenerse y mantiene el sobrevuelo pausado; **Espacio**
+reanuda la marcha. **A/D** cambian el rumbo y **W/S** permiten bajar o subir con
+una inclinación limitada; también cancelan la aproximación automática para tomar
+el control de la altura. Al soltar **W/S**, el morro vuelve suavemente al horizonte
+y la altura se estabiliza. **L** sale del modo conservando la posición y la velocidad.
+El teletransporte y `achu` abandonan el sobrevuelo; si te alejas mucho del planeta,
+recuperas el vuelo espacial automáticamente.
 
 El giro y la cámara usan suavizado exponencial. La integración de navegación
 se divide en pasos de como máximo 1/120 s, manteniendo una respuesta consistente
@@ -143,7 +150,7 @@ a 30, 60 y 144 FPS. Las colisiones siguen comprobando el volumen completo del
 vehículo y generan rebote, explosión y sonido.
 
 Para demostrar esta contribución: elige el ovni, salta a uno de estos planetas,
-acércate para observar sus modelos, pulsa **L** y **Espacio** para rodearlo,
+acércate para observar sus modelos, pulsa **L** para rodearlo automáticamente,
 cambia la altura con **W/S**, frena y sal con **L** para alejarte. Repite en el
 otro planeta. Las inspecciones con **F** describen sus nuevas identidades.
 

@@ -26,6 +26,7 @@ pub struct FollowCamera {
     orbit_yaw: f32,
     return_timer: f32,
     orientation: Quaternion,
+    surface_blend: f32,
 }
 
 impl FollowCamera {
@@ -34,6 +35,11 @@ impl FollowCamera {
         self.orbit_pitch = 0.0;
         self.orbit_yaw = 0.0;
         self.return_timer = 0.0;
+        self.surface_blend = 0.0;
+    }
+    /// Carry the camera around the planet with the pilot, without lagging into the ground.
+    pub fn transport(&mut self, rotation: Quaternion) {
+        self.orientation = (rotation * self.orientation).normalize();
     }
     pub fn new(target_radius: f32) -> Self {
         let distance = target_radius * INITIAL_DISTANCE_FACTOR;
@@ -46,6 +52,7 @@ impl FollowCamera {
             orbit_yaw: 0.0,
             return_timer: 0.0,
             orientation: Quaternion::identity(),
+            surface_blend: 0.0,
         }
     }
 
@@ -55,6 +62,7 @@ impl FollowCamera {
         frame_time: f32,
         target: Vector3,
         target_orientation: Quaternion,
+        surface_flight: bool,
         uniforms: &mut Uniforms,
     ) {
         if input.zoom_delta != 0.0 {
@@ -62,7 +70,10 @@ impl FollowCamera {
                 .clamp(self.min_distance, self.max_distance);
         }
 
-        let distance_multiplier = if input.braking {
+        let surface_target = if surface_flight { 1.0 } else { 0.0 };
+        self.surface_blend +=
+            (surface_target - self.surface_blend) * (1.0 - (-4.0 * frame_time).exp());
+        let space_multiplier = if input.braking {
             BRAKE_PUSHIN
         } else if input.boost {
             BOOST_PULLBACK
@@ -71,6 +82,9 @@ impl FollowCamera {
         } else {
             1.0
         };
+        let local_multiplier = if input.braking { 0.85 } else { 0.90 };
+        let distance_multiplier =
+            space_multiplier + (local_multiplier - space_multiplier) * self.surface_blend;
         let desired_distance = (self.distance * distance_multiplier)
             .clamp(self.min_distance * 0.85, self.max_distance * 1.3);
         self.effective_distance +=
@@ -104,7 +118,11 @@ impl FollowCamera {
         uniforms.camera_pos = target
             + transform_direction(
                 &rotation,
-                Vector3::new(0.0, distance * HEIGHT_FACTOR, -distance),
+                Vector3::new(
+                    0.0,
+                    distance * (HEIGHT_FACTOR + self.surface_blend * 0.25),
+                    -distance,
+                ),
             );
         uniforms.camera_target = target;
         uniforms.camera_up = transform_direction(&rotation, Vector3::new(0.0, 1.0, 0.0));
