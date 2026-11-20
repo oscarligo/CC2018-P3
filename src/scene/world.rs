@@ -572,6 +572,13 @@ impl World {
             .find_map(|entry| entry.object.light_position())
     }
 
+    pub(crate) fn is_primary_light(&self, id: ObjectId) -> bool {
+        self.objects
+            .iter()
+            .find(|entry| entry.id == id)
+            .is_some_and(|entry| entry.object.light_position().is_some())
+    }
+
     pub fn update(&mut self, update: &WorldUpdate) {
         for entry in &mut self.objects {
             entry.object.transform_mut().advance(update);

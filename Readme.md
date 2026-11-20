@@ -30,6 +30,14 @@ conservan su estado; el mundo se pausa mientras estás en el hangar. Volver al h
 detiene la radio y el audio, y cancela el sobrevuelo, los modos especiales y cualquier
 secuencia de la bomba en curso. **Esc** sigue cerrando el juego fuera de los menús.
 
+La franja inferior muestra cuántos planetas quedan respecto al total inicial y la
+velocidad actual. La barra del velocímetro usa una escala logarítmica para conservar
+detalle incluso cuando el carro acumula velocidades muy superiores a la inicial.
+
+Cuando el carro destruye todos los planetas, sus láseres pueden dañar también el Sol.
+Al destruirlo se produce una explosión solar, la pantalla queda cubierta por un destello
+blanco y el sistema se reinicia antes de regresar al hangar.
+
 ### Destructor Estelar y bomba planetaria
 
 Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local
@@ -317,8 +325,28 @@ Las capturas y muestras de audio quedan en `target/previews/`.
 
 La nave recorre el espacio siguiendo su orientación y la cámara mantiene su centro a la vista, incluso durante giros completos o vuelo invertido. Los objetos conservan sus posiciones en el mundo: al acercarte aumentan de tamaño y al pasar a su lado se desplazan en pantalla.
 
+Los fragmentos lejanos pierden contraste progresivamente y se mezclan con el fondo entre 2 500 y 14 000 unidades, aportando perspectiva atmosférica sin alterar los objetos cercanos.
+
+La niebla protege las zonas de alta luminancia para que el sol y las superficies claras de los planetas continúen distinguiéndose a gran distancia.
+
+El campo estelar está distribuido en tres capas de profundidad. Al trasladarse la cámara, las estrellas cercanas se desplazan más que las lejanas y producen parallax.
+
+Las superficies iluminadas reciben una luz de borde sutil en sus siluetas para separar mejor los volúmenes del fondo sin alterar el color base.
+
+Los objetos situados a más de 6 000 unidades reciben una profundidad de campo ligera; la nave y el entorno cercano permanecen nítidos. El modo CRT conserva su pixelado como tratamiento equivalente.
+
+Al usar el propulsor, las chispas conservan menos velocidad que la nave y forman una estela visible que se desvanece detrás de ella.
+
+El carro comienza con el doble de velocidad y, en el espacio, continúa acelerando sin un límite rígido mientras se mantenga el propulsor. El freno aumenta su fuerza a velocidades extremas para conservar el control.
+
+El carro dispone de una mira blanca fija. Cada clic dispara un láser rojo alternando entre ambos extremos delanteros; al mantenerlo presionado, los dos emisores forman haces continuos anclados al carro. La mira no selecciona planetas y los impactos producen una explosión de partículas sobre la superficie.
+
+Los planetas tienen 24 puntos de vida ocultos frente a los láseres del carro. Los impactos acumulan grietas incandescentes en la superficie y, al agotar la vida, el planeta se fragmenta mediante el sistema de destrucción existente.
+
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
 - `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
+- `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.
+- Toda la imagen usa píxeles ampliados y un filtro CRT retro con scanlines, rejilla de fósforo, viñeta y esquinas curvas, incluida la interfaz.
 - `A` / `D`: girar a izquierda / derecha respecto a la nave.
 - `Q` / `E`: inclinarse y acompañar el giro.
 - `F`: interactuar con el cuerpo apuntado desde el centro de la cámara.

@@ -164,7 +164,7 @@ fn choose_vehicle_with_input(
 pub(super) fn draw_hangar(d: &mut RaylibDrawHandle, selected: usize) {
     d.draw_rectangle(0, 0, 800, 112, Color::new(7, 13, 22, 235));
     text(d, "GALAXY / HANGAR", 48, 28, 16, MINT);
-    text(d, "F11: Pantalla completa", 550, 28, 16, MUTED);
+    text(d, "F10: CRT  /  F11: Pantalla completa", 478, 28, 14, MUTED);
     text(d, "Elige tu nave", 48, 56, 34, Color::RAYWHITE);
     text(d, &format!("0{} / 03", selected + 1), 660, 66, 18, MUTED);
     d.draw_rectangle(0, 415, 800, 185, Color::new(7, 13, 22, 235));

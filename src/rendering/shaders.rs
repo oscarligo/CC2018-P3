@@ -8,6 +8,7 @@ use raylib::prelude::*;
 const TRANSPARENCY_CUTOFF: u8 = 16;
 const COLOR_CHANNEL_MAX: f32 = 255.0;
 const AMBIENT_LIGHT: f32 = 0.06;
+const RIM_LIGHT: f32 = 0.12;
 
 fn multiply_matrix_vector4(matrix: &Matrix, vector: &Vector4) -> Vector4 {
     Vector4::new(
@@ -47,7 +48,9 @@ pub fn lit_vertex_shader(vertex: &Vertex, uniforms: &Uniforms) -> Vertex {
     let normal = normalized_or_zero(Vector3::new(normal.x, normal.y, normal.z));
     let light_direction = normalized_or_zero(light_position - result.transformed_position);
     let diffuse = normal.dot(light_direction).max(0.0).powf(0.65);
-    let intensity = AMBIENT_LIGHT + diffuse * (1.0 - AMBIENT_LIGHT);
+    let view_direction = normalized_or_zero(uniforms.camera_pos - result.transformed_position);
+    let rim = (1.0 - normal.dot(view_direction).abs()).powi(4) * RIM_LIGHT;
+    let intensity = (AMBIENT_LIGHT + diffuse * (1.0 - AMBIENT_LIGHT) + rim).min(1.0);
     result.color = vertex.color * intensity;
     result
 }
@@ -88,7 +91,7 @@ mod tests {
     fn uniforms(light_position: Vector3) -> Uniforms {
         Uniforms {
             model_matrix: Matrix::identity(),
-            camera_pos: Vector3::zero(),
+            camera_pos: Vector3::new(0.0, 0.0, -10.0),
             camera_target: Vector3::new(0.0, 0.0, 1.0),
             camera_up: Vector3::new(0.0, 1.0, 0.0),
             light_position: Some(light_position),
@@ -108,5 +111,20 @@ mod tests {
 
         assert!(front.color.x > back.color.x * 10.0);
         assert!((back.color.x - AMBIENT_LIGHT).abs() < 0.001);
+    }
+
+    #[test]
+    fn grazing_surfaces_receive_a_subtle_camera_facing_rim() {
+        let mut center = Vertex::new(Vector3::zero());
+        center.normal = Vector3::new(0.0, 0.0, -1.0);
+        let mut edge = center;
+        edge.normal = Vector3::new(1.0, 0.0, 0.0);
+        let uniforms = uniforms(Vector3::new(0.0, 0.0, 10.0));
+
+        let center = lit_vertex_shader(&center, &uniforms);
+        let edge = lit_vertex_shader(&edge, &uniforms);
+
+        assert!((center.color.x - AMBIENT_LIGHT).abs() < 0.001);
+        assert!((edge.color.x - (AMBIENT_LIGHT + RIM_LIGHT)).abs() < 0.001);
     }
 }

@@ -50,6 +50,21 @@ pub fn bounds(mesh: &Mesh) -> (Vector3, f32) {
 }
 
 impl Vehicle {
+    pub fn car_laser_muzzles(&self) -> [Vector3; 2] {
+        let half_width = self
+            .mesh
+            .vertices
+            .iter()
+            .map(|vertex| (vertex.position.x - self.center.x).abs())
+            .fold(0.0_f32, f32::max)
+            * 0.82;
+        let position = self.center + Vector3::new(0.0, self.radius * 0.04, self.radius * 0.28);
+        [
+            position + Vector3::new(-half_width, 0.0, 0.0),
+            position + Vector3::new(half_width, 0.0, 0.0),
+        ]
+    }
+
     pub fn car() -> Self {
         let mesh = crate::rendering::load_objects::load_obj("assets/red_car.obj")
             .expect("No se pudo cargar assets/red_car.obj");
