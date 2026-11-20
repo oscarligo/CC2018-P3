@@ -59,6 +59,14 @@ impl ShipMovement {
         self.target
     }
 
+    pub fn speed(&self) -> f32 {
+        self.speed
+    }
+
+    pub fn speed_multiple(&self) -> f32 {
+        self.speed / self.max_speed.max(0.001)
+    }
+
     pub fn configure_vehicle(&mut self, base_radius: f32, acceleration_duration: f32, alien: bool) {
         let multiplier = if alien { 3.0 } else { 1.0 };
         self.max_speed = base_radius * MAX_SPEED_FACTOR * multiplier;

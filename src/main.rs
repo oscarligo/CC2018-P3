@@ -109,6 +109,7 @@ fn main() {
         let mut framebuffer =
             Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
         let mut world = build_solar_system();
+        let total_planets = world.travel_targets().len();
         let mut selected = 0;
         'hangar: loop {
             let car = Vehicle::car();
@@ -406,6 +407,15 @@ fn main() {
                         {
                             car_weapons.draw_hud(d, &draw_uniforms);
                         }
+                        if !travel.open && !weapon_blocked {
+                            draw_flight_status(
+                                d,
+                                world.travel_targets().len(),
+                                total_planets,
+                                movement.speed(),
+                                movement.speed_multiple(),
+                            );
+                        }
                         draw_hangar_return(d);
                     },
                 );
@@ -418,6 +428,45 @@ fn main() {
             return;
         }
     });
+}
+
+fn speed_meter_fill(speed_multiple: f32) -> f32 {
+    ((1.0 + 9.0 * speed_multiple.max(0.0)).ln() / 10_000.0_f32.ln()).clamp(0.0, 1.0)
+}
+
+fn draw_flight_status(
+    d: &mut RaylibDrawHandle,
+    remaining_planets: usize,
+    total_planets: usize,
+    speed: f32,
+    speed_multiple: f32,
+) {
+    const X: i32 = 16;
+    const Y: i32 = 558;
+    const WIDTH: i32 = 400;
+    const HEIGHT: i32 = 28;
+    const BAR_X: i32 = 254;
+    const BAR_WIDTH: i32 = 146;
+
+    d.draw_rectangle(X, Y, WIDTH, HEIGHT, Color::new(5, 14, 30, 225));
+    d.draw_rectangle_lines(X, Y, WIDTH, HEIGHT, Color::new(74, 125, 174, 230));
+    d.draw_text(
+        &format!("PLANETAS {remaining_planets}/{total_planets}"),
+        X + 10,
+        Y + 7,
+        14,
+        Color::new(224, 236, 246, 255),
+    );
+    d.draw_text(
+        &format!("VEL {speed:.0}"),
+        X + 132,
+        Y + 7,
+        14,
+        Color::new(224, 236, 246, 255),
+    );
+    d.draw_rectangle(BAR_X, Y + 8, BAR_WIDTH, 12, Color::new(12, 29, 48, 255));
+    let fill = (BAR_WIDTH as f32 * speed_meter_fill(speed_multiple).clamp(0.0, 1.0)) as i32;
+    d.draw_rectangle(BAR_X, Y + 8, fill, 12, Color::new(100, 220, 255, 255));
 }
 
 fn model_point(m: &Matrix, p: Vector3) -> Vector3 {
@@ -730,6 +779,14 @@ fn build_benchmark_world(object_count: usize) -> World {
 #[cfg(test)]
 mod benchmark_tests {
     use super::*;
+
+    #[test]
+    fn speed_meter_remains_useful_at_extreme_speeds() {
+        assert_eq!(speed_meter_fill(0.0), 0.0);
+        assert!(speed_meter_fill(1.0) > 0.2);
+        assert!(speed_meter_fill(100.0) > speed_meter_fill(1.0));
+        assert_eq!(speed_meter_fill(1_000_000.0), 1.0);
+    }
 
     #[test]
     fn travel_catalog_stays_stable_when_rendering_reorders_the_world() {

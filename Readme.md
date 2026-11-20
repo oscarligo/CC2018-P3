@@ -30,6 +30,10 @@ conservan su estado; el mundo se pausa mientras estás en el hangar. Volver al h
 detiene la radio y el audio, y cancela el sobrevuelo, los modos especiales y cualquier
 secuencia de la bomba en curso. **Esc** sigue cerrando el juego fuera de los menús.
 
+La franja inferior muestra cuántos planetas quedan respecto al total inicial y la
+velocidad actual. La barra del velocímetro usa una escala logarítmica para conservar
+detalle incluso cuando el carro acumula velocidades muy superiores a la inicial.
+
 ### Destructor Estelar y bomba planetaria
 
 Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local
