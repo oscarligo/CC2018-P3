@@ -81,6 +81,7 @@ pub fn choose_vehicle(
     renderer: &mut Renderer,
     vehicles: &mut [Vehicle; 3],
     initial_selection: usize,
+    solar_return: bool,
 ) -> Option<usize> {
     choose_vehicle_with_input(
         window,
@@ -89,6 +90,7 @@ pub fn choose_vehicle(
         renderer,
         vehicles,
         initial_selection,
+        solar_return,
         |_, _| {},
     )
 }
@@ -100,6 +102,7 @@ fn choose_vehicle_with_input(
     renderer: &mut Renderer,
     vehicles: &mut [Vehicle; 3],
     initial_selection: usize,
+    solar_return: bool,
     mut before_input: impl FnMut(&mut RaylibHandle, usize),
 ) -> Option<usize> {
     let stars = Starfield::new();
@@ -110,7 +113,7 @@ fn choose_vehicle_with_input(
         before_input(window, frame);
         crate::display::update(window);
         // Draw once before accepting input from a previous flight or dialog.
-        if frame > 0 {
+        if frame > 0 && (!solar_return || elapsed >= 1.5) {
             if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
                 return None;
             }
@@ -148,6 +151,11 @@ fn choose_vehicle_with_input(
             }
         }
         frame += 1;
+        let fade_alpha = if solar_return {
+            solar_return_alpha(elapsed)
+        } else {
+            0
+        };
         elapsed += window.get_frame_time().min(0.1);
         fb.clear();
         renderer.begin_frame();
@@ -155,7 +163,12 @@ fn choose_vehicle_with_input(
         let u = vehicles[selected].preview_uniforms((elapsed * 0.38).sin() * 0.65);
         stars.draw(fb, &u);
         vehicles[selected].draw(renderer, fb, &u, elapsed);
-        fb.present(window, thread, None, |d| draw_hangar(d, selected));
+        fb.present(window, thread, None, |d| {
+            draw_hangar(d, selected);
+            if fade_alpha > 0 {
+                d.draw_rectangle(0, 0, 800, 600, Color::new(255, 255, 255, fade_alpha));
+            }
+        });
         std::thread::sleep(std::time::Duration::from_millis(16));
     }
     None
@@ -327,3 +340,27 @@ impl TravelMenu {
 #[cfg(test)]
 #[path = "menu_tests.rs"]
 mod tests;
+
+fn solar_return_alpha(elapsed: f32) -> u8 {
+    let progress = (elapsed / 1.5).clamp(0.0, 1.0);
+    let smooth = progress * progress * (3.0 - 2.0 * progress);
+    ((1.0 - smooth) * 255.0).round() as u8
+}
+
+#[cfg(test)]
+mod transition_tests {
+    use super::*;
+
+    #[test]
+    fn solar_return_fades_from_white_to_clear_without_jumps() {
+        assert_eq!(solar_return_alpha(0.0), 255);
+        assert_eq!(solar_return_alpha(1.5), 0);
+        assert_eq!(solar_return_alpha(3.0), 0);
+        let mut previous = 255;
+        for frame in 0..=90 {
+            let alpha = solar_return_alpha(frame as f32 / 60.0);
+            assert!(alpha <= previous && previous - alpha <= 5);
+            previous = alpha;
+        }
+    }
+}

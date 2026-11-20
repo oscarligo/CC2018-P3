@@ -112,6 +112,7 @@ fn main() {
         let mut world = build_solar_system();
         let total_planets = world.travel_targets().len();
         let mut selected = 0;
+        let mut solar_return = false;
         'hangar: loop {
             let car = Vehicle::car();
             let car_radius = car.radius;
@@ -127,10 +128,12 @@ fn main() {
                 &mut renderer,
                 &mut vehicles,
                 selected,
+                solar_return,
             ) else {
                 return;
             };
             selected = choice;
+            solar_return = false;
             // Each departure owns its audio and transient state; returning drops them all.
             let mut rocket_audio = RocketAudio::new(&audio);
             let mut alien_audio = AlienAudio::new(&audio);
@@ -443,6 +446,7 @@ fn main() {
                     .is_some_and(CarWeapons::finale_complete)
                 {
                     world = build_solar_system();
+                    solar_return = true;
                     continue 'hangar;
                 }
                 let mut metrics = renderer.metrics();
