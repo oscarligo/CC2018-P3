@@ -172,7 +172,15 @@ impl Framebuffer {
                 .max()
                 .unwrap_or(0)
         });
-        let mut renderer = window.begin_drawing(raylib_thread);
+        let camera = crate::display::viewport(
+            window.get_screen_width(),
+            window.get_screen_height(),
+            self.width,
+            self.height,
+        );
+        let mut drawing = window.begin_drawing(raylib_thread);
+        drawing.clear_background(Color::BLACK);
+        let mut renderer = drawing.begin_mode2D(camera);
         renderer.draw_texture(texture, 0, 0, Color::WHITE);
         if let Some((lines, width)) = overlay_lines.zip(overlay_width) {
             const PADDING: i32 = 14;

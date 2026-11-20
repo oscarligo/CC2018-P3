@@ -318,6 +318,7 @@ Las capturas y muestras de audio quedan en `target/previews/`.
 La nave recorre el espacio siguiendo su orientación y la cámara mantiene su centro a la vista, incluso durante giros completos o vuelo invertido. Los objetos conservan sus posiciones en el mundo: al acercarte aumentan de tamaño y al pasar a su lado se desplazan en pantalla.
 
 - `S` / `W`: elevar / bajar el morro respecto a la nave.
+- `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
 - `A` / `D`: girar a izquierda / derecha respecto a la nave.
 - `Q` / `E`: inclinarse y acompañar el giro.
 - `F`: interactuar con el cuerpo apuntado desde el centro de la cámara.

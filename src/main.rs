@@ -1,4 +1,5 @@
 mod celestial_shaders;
+mod display;
 mod interaction;
 mod noise;
 pub mod objects;
@@ -170,6 +171,7 @@ fn main() {
             movement.update(&InputState::read(&window), 0.0, &mut uniforms, &world);
 
             while !window.window_should_close() {
+                display::update(&mut window);
                 if hangar_requested(&window) {
                     continue 'hangar;
                 }
