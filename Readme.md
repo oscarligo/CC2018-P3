@@ -23,6 +23,13 @@ clic y pulsa `Enter` o **Despegar**:
   casco triangular, ciudadela escalonada, puente, cúpulas, torretas, motores azules
   y una bahía ventral animada para la bomba planetaria.
 
+Durante el juego, pulsa **F1** o haz clic en **Cambiar nave**, en la esquina superior
+derecha, para regresar al hangar. La selección conserva la última nave elegida.
+Al despegar de nuevo, el vehículo comienza desde la posición inicial y los planetas
+conservan su estado; el mundo se pausa mientras estás en el hangar. Volver al hangar
+detiene la radio y el audio, y cancela el sobrevuelo, los modos especiales y cualquier
+secuencia de la bomba en curso. **Esc** sigue cerrando el juego fuera de los menús.
+
 ### Destructor Estelar y bomba planetaria
 
 Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local

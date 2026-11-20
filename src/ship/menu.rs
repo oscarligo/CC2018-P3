@@ -8,6 +8,38 @@ use raylib::prelude::*;
 const MINT: Color = Color::new(115, 195, 255, 255);
 const MUTED: Color = Color::new(158, 179, 194, 255);
 const PANEL: Color = Color::new(13, 23, 33, 245);
+const HANGAR_BUTTON: Rectangle = Rectangle {
+    x: 592.,
+    y: 16.,
+    width: 192.,
+    height: 30.,
+};
+
+pub fn hangar_requested(window: &RaylibHandle) -> bool {
+    window.is_key_pressed(KeyboardKey::KEY_F1)
+        || (window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT)
+            && inside(
+                window.get_mouse_position(),
+                HANGAR_BUTTON.x as i32,
+                HANGAR_BUTTON.y as i32,
+                HANGAR_BUTTON.width as i32,
+                HANGAR_BUTTON.height as i32,
+            ))
+}
+
+pub fn draw_hangar_return(d: &mut RaylibDrawHandle) {
+    let hovered = inside(d.get_mouse_position(), 592, 16, 192, 30);
+    d.draw_rectangle_rec(
+        HANGAR_BUTTON,
+        if hovered {
+            Color::new(25, 58, 108, 245)
+        } else {
+            PANEL
+        },
+    );
+    d.draw_rectangle_lines(592, 16, 192, 30, if hovered { MINT } else { MUTED });
+    text(d, "F1: Cambiar nave", 610, 24, 16, MINT);
+}
 
 fn text(d: &mut RaylibDrawHandle, label: &str, x: i32, y: i32, size: i32, color: Color) {
     d.draw_text(label, x, y, size, color);
@@ -48,46 +80,73 @@ pub fn choose_vehicle(
     fb: &mut Framebuffer,
     renderer: &mut Renderer,
     vehicles: &mut [Vehicle; 3],
+    initial_selection: usize,
+) -> Option<usize> {
+    choose_vehicle_with_input(
+        window,
+        thread,
+        fb,
+        renderer,
+        vehicles,
+        initial_selection,
+        |_, _| {},
+    )
+}
+
+fn choose_vehicle_with_input(
+    window: &mut RaylibHandle,
+    thread: &RaylibThread,
+    fb: &mut Framebuffer,
+    renderer: &mut Renderer,
+    vehicles: &mut [Vehicle; 3],
+    initial_selection: usize,
+    mut before_input: impl FnMut(&mut RaylibHandle, usize),
 ) -> Option<usize> {
     let stars = Starfield::new();
-    let mut selected = 0;
+    let mut selected = initial_selection.min(vehicles.len() - 1);
     let mut elapsed = 0.0;
+    let mut frame = 0;
     while !window.window_should_close() {
-        if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
-            return None;
-        }
-        if window.is_key_pressed(KeyboardKey::KEY_LEFT) {
-            selected = (selected + 2) % 3;
-        }
-        if window.is_key_pressed(KeyboardKey::KEY_RIGHT) {
-            selected = (selected + 1) % 3;
-        }
-        for (i, key) in [
-            KeyboardKey::KEY_ONE,
-            KeyboardKey::KEY_TWO,
-            KeyboardKey::KEY_THREE,
-        ]
-        .into_iter()
-        .enumerate()
-        {
-            if window.is_key_pressed(key) {
-                selected = i;
+        before_input(window, frame);
+        // Draw once before accepting input from a previous flight or dialog.
+        if frame > 0 {
+            if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
+                return None;
             }
-        }
-        let p = window.get_mouse_position();
-        if window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
-            for i in 0..3 {
-                if inside(p, 28 + i as i32 * 252, 430, 240, 52) {
+            if window.is_key_pressed(KeyboardKey::KEY_LEFT) {
+                selected = (selected + 2) % 3;
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_RIGHT) {
+                selected = (selected + 1) % 3;
+            }
+            for (i, key) in [
+                KeyboardKey::KEY_ONE,
+                KeyboardKey::KEY_TWO,
+                KeyboardKey::KEY_THREE,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                if window.is_key_pressed(key) {
                     selected = i;
                 }
             }
-            if inside(p, 260, 530, 280, 52) {
+            let p = window.get_mouse_position();
+            if window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
+                for i in 0..3 {
+                    if inside(p, 28 + i as i32 * 252, 430, 240, 52) {
+                        selected = i;
+                    }
+                }
+                if inside(p, 260, 530, 280, 52) {
+                    return Some(selected);
+                }
+            }
+            if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
                 return Some(selected);
             }
         }
-        if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
-            return Some(selected);
-        }
+        frame += 1;
         elapsed += window.get_frame_time().min(0.1);
         fb.clear();
         renderer.begin_frame();
@@ -262,3 +321,7 @@ impl TravelMenu {
         button(d, 260, 506, 280, "TELETRANSPORTAR [ENTER]", true);
     }
 }
+
+#[cfg(test)]
+#[path = "menu_tests.rs"]
+mod tests;
