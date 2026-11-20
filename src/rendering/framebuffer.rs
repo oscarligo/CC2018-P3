@@ -3,6 +3,7 @@ use raylib::prelude::*;
 const COLOR_CHANNEL_MAX: f32 = 255.0;
 const OPAQUE_ALPHA: u8 = 255;
 const CHANNELS_PER_PIXEL: usize = 4;
+const FAR_FOCUS_DISTANCE: f32 = 6_000.0;
 
 pub struct Framebuffer {
     pub width: u32,
@@ -86,6 +87,39 @@ impl Framebuffer {
                         self.display_pixels[start..start + CHANNELS_PER_PIXEL]
                             .copy_from_slice(&color);
                     }
+                }
+            }
+        }
+    }
+
+    fn prepare_depth_of_field(&mut self) {
+        self.display_pixels.copy_from_slice(&self.pixels);
+        let width = self.width as usize;
+        let height = self.height as usize;
+        for y in 1..height.saturating_sub(1) {
+            for x in 1..width.saturating_sub(1) {
+                let pixel = y * width + x;
+                if !self.depth_buffer[pixel].is_finite()
+                    || self.depth_buffer[pixel] < FAR_FOCUS_DISTANCE
+                {
+                    continue;
+                }
+                let mut sum = [0_u16; CHANNELS_PER_PIXEL];
+                let mut count = 0_u16;
+                for neighbor in [pixel, pixel - 1, pixel + 1, pixel - width, pixel + width] {
+                    if self.depth_buffer[neighbor].is_finite()
+                        && self.depth_buffer[neighbor] >= FAR_FOCUS_DISTANCE
+                    {
+                        let start = neighbor * CHANNELS_PER_PIXEL;
+                        for channel in 0..CHANNELS_PER_PIXEL {
+                            sum[channel] += self.pixels[start + channel] as u16;
+                        }
+                        count += 1;
+                    }
+                }
+                let start = pixel * CHANNELS_PER_PIXEL;
+                for channel in 0..CHANNELS_PER_PIXEL {
+                    self.display_pixels[start + channel] = (sum[channel] / count) as u8;
                 }
             }
         }
@@ -187,6 +221,8 @@ impl Framebuffer {
         let crt_enabled = crate::display::crt_enabled();
         if crt_enabled {
             self.prepare_display_pixels();
+        } else {
+            self.prepare_depth_of_field();
         }
         if self.texture.is_none() {
             let image = Image::gen_image_color(
@@ -199,12 +235,7 @@ impl Framebuffer {
         let Some(texture) = &mut self.texture else {
             return;
         };
-        let display = if crt_enabled {
-            &self.display_pixels
-        } else {
-            &self.pixels
-        };
-        if texture.update_texture(display).is_err() {
+        if texture.update_texture(&self.display_pixels).is_err() {
             return;
         }
 
@@ -400,6 +431,27 @@ mod tests {
         }
         assert_eq!(&framebuffer.display_pixels[8..12], &[40, 60, 80, 255]);
         assert_eq!(&framebuffer.display_pixels[20..24], &[40, 60, 80, 255]);
+    }
+
+    #[test]
+    fn depth_of_field_softens_only_distant_geometry() {
+        let mut framebuffer = Framebuffer::new(3, 3, Color::BLACK);
+        for y in 0..3 {
+            for x in 0..3 {
+                let color = if (x, y) == (1, 1) {
+                    Vector3::new(1.0, 1.0, 1.0)
+                } else {
+                    Vector3::zero()
+                };
+                framebuffer.point(x, y, FAR_FOCUS_DISTANCE, color);
+            }
+        }
+        framebuffer.prepare_depth_of_field();
+        assert_eq!(&framebuffer.display_pixels[16..20], &[51, 51, 51, 255]);
+
+        framebuffer.point(1, 1, 1.0, Vector3::new(1.0, 0.0, 0.0));
+        framebuffer.prepare_depth_of_field();
+        assert_eq!(&framebuffer.display_pixels[16..20], &[255, 0, 0, 255]);
     }
 
     #[test]
