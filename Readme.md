@@ -12,13 +12,75 @@
 
 ## Ejecución
 
-Al iniciar aparece un hangar con vista previa 3D. Elige con `1` / `2`, flechas o
+Al iniciar aparece un hangar con vista previa 3D. Elige con `1` / `2` / `3`, flechas o
 clic y pulsa `Enter` o **Despegar**:
 
 - **Carro original:** conserva su modelo, controles y propulsión.
 - **Ovni / gato alien:** platillo metálico con luces verdes, cúpula transparente
   y piloto felino con antenas. Su aceleración y velocidad máxima son tres veces
   las del carro; sus partículas y estelas son verdes.
+- **Destructor Estelar:** nave original inspirada en un Destructor Estelar, con
+  casco triangular, ciudadela escalonada, puente, cúpulas, torretas, motores azules
+  y una bahía ventral animada para la bomba planetaria.
+
+### Destructor Estelar y bomba planetaria
+
+Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local
+con `L`; también permite viajar escribiendo `3.14`, igual que el ovni.
+Apunta la mira de la proa hacia un planeta cercano: aparecerán su nombre y
+unas esquinas rojas alrededor del objetivo. El sol no es un objetivo válido.
+
+1. **B:** fija el planeta y abre la bahía. La nave acompaña su órbita durante
+   la operación; las órbitas del sistema continúan y no se cambia de escena.
+2. **J, pulsar y soltar rápidamente:** cada pulsación aporta hasta 6,5 puntos
+   porcentuales a la carga. Mantener la tecla o la repetición del teclado no
+   sirve. El reactor pierde entre 17 y 42 puntos por segundo, según su carga:
+   la parte final exige sostener aproximadamente siete pulsaciones por segundo.
+   La estabilización exige **al menos 15 segundos pulsando**, incluso a un ritmo
+   mayor; esperar sin pulsar no adelanta ese tiempo. Si el reactor se vacía,
+   la estabilización vuelve a comenzar. A seis pulsaciones por segundo no se
+   consigue terminar. A 60 FPS, siete pulsaciones por segundo completan la carga
+   en unos 15,2 segundos. El panel muestra el porcentaje, las pulsaciones del
+   último segundo y los segundos de estabilización pendientes.
+3. El tono del reactor sube y baja con la carga real. Se intensifican la luz,
+   los conductos y una vibración leve. Los sonidos se sintetizan en CPU.
+4. **La pregunta aparece al llegar al 100 %**, después de estabilizar el reactor.
+   La carga queda asegurada y se abre el diálogo
+   **«¿Estás seguro de que quieres exterminar un planeta completo?»** con
+   **«Sí, lanzar»** y **«Ay noooo»**. La cancelación está seleccionada inicialmente.
+   Usa **flechas** y después **Enter**; `J` nunca confirma el lanzamiento.
+5. **B / Esc** cancelan la carga o la confirmación. Perder el foco de la ventana
+   también cancela esas fases. Una vez autorizado el lanzamiento, la bomba
+   persigue la posición actual del planeta, aparecen grietas luminosas y una
+   onda expansiva, y el planeta se convierte en escombros animados.
+
+La destrucción retira también los objetos unidos al planeta, incluidos modelos
+de superficie, atmósfera, anillos y satélites, además de sus colisiones y destinos
+de viaje. Al terminar la secuencia, **F8** restaura todos los planetas destruidos
+y sus objetos, conservando sus identificadores, sin reiniciar el programa.
+Los demás vehículos conservan sus funciones. `Esc` fuera de un menú o de la
+secuencia del arma cierra el juego.
+
+El casco, las compuertas, la bomba, las grietas y los fragmentos se transforman
+y dibujan en el pipeline de software. La nave se carga desde
+`assets/star_destroyer.obj`; las piezas móviles usan `star_destroyer_door.obj`
+y `star_destroyer_bomb.obj`, con materiales compartidos en `star_destroyer.mtl`.
+Son recursos OBJ editables; el cargador propio conserva los colores `Kd` y las
+luces `Ke` del MTL, y las piezas se animan mediante transformaciones independientes.
+El modelo y los sonidos son originales,
+creados para este proyecto con asistencia de Codex/IA; no se descargaron modelos
+ni audio de Star Wars.
+
+Para generar capturas del hangar, la bahía, la carga, el diálogo, el lanzamiento,
+la destrucción y la cancelación, además de los WAV, sin reproducir audio:
+
+```bash
+cargo run --release -- --preview-doomsday
+```
+
+La verificación usa una ventana oculta y controles simulados sobre la lógica real;
+también comprueba la restauración. Los archivos quedan en `target/previews/destroyer-*`.
+Las constantes de dificultad están en `src/ship/doomsday.rs`.
 
 El ovni está modelado mediante geometría propia en `src/ship/vehicle.rs`:
 casco, aros, paneles, tornillos, consola, gato y cúpula se construyen en CPU.
@@ -103,7 +165,7 @@ El video y los nombres de los integrantes siguen correspondiendo a la entrega
 compartida. Esta ampliación se desarrolló con asistencia de Codex/IA; los modelos
 de flora, fauna y estaciones son propios del proyecto, sin descargas externas.
 
-### Teletransporte del ovni
+### Teletransporte del ovni y del destructor
 
 Durante el vuelo, escribe la secuencia `3.14` (sin Enter, en menos de cinco
 segundos entre caracteres). También acepta la coma decimal del teclado numérico.
@@ -218,7 +280,7 @@ Las capturas quedan en `target/previews/dyson-*.png`.
 
 ### Choques
 
-Ambos vehículos chocan con los cuerpos celestes, incluidas lunas y estrellas.
+Los tres vehículos chocan con los cuerpos celestes, incluidas lunas y estrellas.
 Se comprueba todo el segmento recorrido por el volumen del vehículo en cada
 frame para impedir atravesar un planeta incluso durante `achu`. El impacto
 produce una explosión luminosa, sonido grave, una breve sacudida de cámara y
@@ -275,7 +337,7 @@ cargo run --release
 Cierra cualquier ejecución anterior antes de recompilar: Windows bloquea el
 archivo `.exe` mientras está abierto.
 
-Para generar capturas de ambos vehículos con el renderer CPU sin abrir ventanas:
+Para generar capturas de los tres vehículos con el renderer CPU sin abrir ventanas:
 
 ```bash
 cargo run --release -- --preview-ships
