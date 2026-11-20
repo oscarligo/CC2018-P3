@@ -319,6 +319,8 @@ La nave recorre el espacio siguiendo su orientación y la cámara mantiene su ce
 
 Los fragmentos lejanos pierden contraste progresivamente y se mezclan con el fondo entre 2 500 y 14 000 unidades, aportando perspectiva atmosférica sin alterar los objetos cercanos.
 
+La niebla protege las zonas de alta luminancia para que el sol y las superficies claras de los planetas continúen distinguiéndose a gran distancia.
+
 El campo estelar está distribuido en tres capas de profundidad. Al trasladarse la cámara, las estrellas cercanas se desplazan más que las lejanas y producen parallax.
 
 Las superficies iluminadas reciben una luz de borde sutil en sus siluetas para separar mejor los volúmenes del fondo sin alterar el color base.

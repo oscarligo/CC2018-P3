@@ -13,10 +13,15 @@ use std::time::Instant;
 const FOG_START: f32 = 2_500.0;
 const FOG_END: f32 = 14_000.0;
 const FOG_MAX_STRENGTH: f32 = 0.82;
+const HIGHLIGHT_FOG_PROTECTION: f32 = 0.78;
 
 fn apply_depth_fog(color: Vector3, depth: f32, fog_color: Vector3) -> Vector3 {
     let t = ((depth - FOG_START) / (FOG_END - FOG_START)).clamp(0.0, 1.0);
-    let strength = t * t * (3.0 - 2.0 * t) * FOG_MAX_STRENGTH;
+    let luminance = color.x * 0.2126 + color.y * 0.7152 + color.z * 0.0722;
+    let highlight = ((luminance - 0.45) / 0.45).clamp(0.0, 1.0);
+    let highlight = highlight * highlight * (3.0 - 2.0 * highlight);
+    let strength =
+        t * t * (3.0 - 2.0 * t) * FOG_MAX_STRENGTH * (1.0 - highlight * HIGHLIGHT_FOG_PROTECTION);
     color * (1.0 - strength) + fog_color * strength
 }
 
@@ -307,7 +312,7 @@ mod tests {
 
     #[test]
     fn depth_fog_preserves_near_colors_and_blends_distant_fragments() {
-        let color = Vector3::new(1.0, 0.4, 0.1);
+        let color = Vector3::new(0.35, 0.2, 0.1);
         let fog = Vector3::new(0.02, 0.04, 0.08);
         assert_eq!(apply_depth_fog(color, FOG_START, fog), color);
 
@@ -319,6 +324,16 @@ mod tests {
             far,
             color * (1.0 - FOG_MAX_STRENGTH) + fog * FOG_MAX_STRENGTH
         );
+    }
+
+    #[test]
+    fn bright_surfaces_remain_visible_through_distant_fog() {
+        let fog = Vector3::new(0.02, 0.04, 0.08);
+        let dark = apply_depth_fog(Vector3::new(0.3, 0.3, 0.3), FOG_END, fog);
+        let bright = apply_depth_fog(Vector3::one(), FOG_END, fog);
+
+        assert!(bright.x > 0.75);
+        assert!(bright.x - fog.x > (dark.x - fog.x) * 8.0);
     }
 
     #[test]
