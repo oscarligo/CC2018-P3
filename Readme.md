@@ -237,8 +237,9 @@ al encenderla de nuevo conserva la posición y el estado de pausa.
 
 Solo hay tres botones: **Anterior**, **Pausar/Reanudar** y **Siguiente**.
 La radio elige al azar evitando repetir inmediatamente la misma canción cuando
-hay otras disponibles. Cada elección nueva comienza en un punto aleatorio,
-dejando al menos el último cuarto o 30 segundos por escuchar, lo que sea menor.
+hay otras disponibles. Cada elección nueva comienza en un punto aleatorio
+entre el 25 % y el 75 % de la canción. `Intro.mp3` queda reservada para la
+secuencia inicial y se excluye de la rotación normal.
 Al terminar una canción pasa automáticamente a otra selección aleatoria.
 
 Anterior recorre el historial con los puntos de inicio que se eligieron para
@@ -398,3 +399,7 @@ cargo run --release -- --benchmark --objects 300
 ```
 
 Con el carro original, **N** marca un planeta al azar con la misma mira del destructor. Pulsa **N** para quitar la marca y otra vez para elegir otro planeta. La marca sigue al planeta durante su órbita.
+
+Al despegar con el carro original un fundido de entrada de 3 segundos precede un plano fijo de 3 segundos en el que el carro pasa a alta velocidad; después comienzan la canción y la intro de 27 segundos con la radio encendida y **Intro.mp3** desde el inicio, a la mitad del volumen habitual: primer plano del conductor con apertura hacia el frente del carro al llegar al segundo 13, planos exteriores con órbitas rápidas y cortes directos en los segundos 13, 17, 20 y 23, y regreso suave a la cámara habitual al segundo 27, cuando se habilitan los controles. La aproximación comienza diez veces más lejos, con el propulsor y la estela activos. La radio continúa encendida después de la intro.
+
+El paso inicial cruza hacia la izquierda. Después del plano del conductor hay una órbita alrededor de la nave (13–20 s), seguida de cámaras fijas elevadas (20–21.5 s) y diagonales traseras (21.5–23 s) y el regreso suave a la cámara de juego.

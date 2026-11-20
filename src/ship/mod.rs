@@ -20,3 +20,5 @@ pub(crate) mod vehicle;
 pub(crate) use audio::RocketAudio;
 pub(crate) use input::InputState;
 pub(crate) use movement::ShipMovement;
+
+pub(crate) use movement::entry_fade as intro_entry_fade;

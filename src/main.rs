@@ -184,6 +184,9 @@ fn main() {
             }
             movement.update(&InputState::read(&window), 0.0, &mut uniforms, &world);
 
+            let intro_destination = movement.position();
+            let mut intro_time = (vehicle.kind == VehicleKind::Car).then_some(-6.0_f32);
+
             while !window.window_should_close() {
                 display::update(&mut window);
                 if hangar_requested(&window) {
@@ -198,6 +201,21 @@ fn main() {
                 let update_start = Instant::now();
                 world.update(&WorldUpdate { frame_time });
                 let targets = world.travel_targets();
+                let intro_active = intro_time.is_some();
+                if intro_active && let Some(radio) = &mut radio {
+                    radio.poll_intro();
+                    if let Some(time) = &mut intro_time {
+                        if *time < 0.0 {
+                            *time = (*time + window.get_frame_time()).min(0.0);
+                            if *time == 0.0 {
+                                radio.start_intro();
+                            }
+                        } else if radio.intro_ready() {
+                            *time = (*time + window.get_frame_time()).min(27.0);
+                        }
+                    }
+                }
+                let intro_fade = intro_time.map_or(0, ship::intro_entry_fade);
                 let was_open = travel.open;
                 let was_weapon_busy = weapon.busy();
                 if !was_open && !was_weapon_busy && window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
@@ -207,7 +225,8 @@ fn main() {
                 let mut open_jump = false;
                 let mut radio_toggled = false;
                 while let Some(ch) = window.get_char_pressed() {
-                    if !travel.open
+                    if !intro_active
+                        && !travel.open
                         && !weapon.busy()
                         && let Some(command) = commands.push(ch)
                     {
@@ -228,7 +247,8 @@ fn main() {
                         }
                     }
                 }
-                let radio_mouse = radio.as_mut().is_some_and(|r| r.update(&window));
+                let radio_mouse =
+                    !intro_active && radio.as_mut().is_some_and(|r| r.update(&window));
                 let jump = travel.update(&mut window, vehicle.kind, open_jump, &targets);
                 if let Some(index) = jump
                     && movement.teleport(&targets[index], &world)
@@ -264,7 +284,8 @@ fn main() {
                     }
                 }
                 let weapon_blocked = was_weapon_busy || weapon.busy();
-                let blocked = was_open || travel.open || jump.is_some() || weapon_blocked;
+                let blocked =
+                    intro_active || was_open || travel.open || jump.is_some() || weapon_blocked;
                 if vehicle.kind == VehicleKind::Car
                     && !blocked
                     && window.is_key_pressed(KeyboardKey::KEY_N)
@@ -301,7 +322,17 @@ fn main() {
                     input.firing = false;
                     input.firing_held = false;
                 }
-                if weapon_blocked && let Some(target) = weapon.target.or(previous_target) {
+                if let Some(time) = intro_time {
+                    movement.intro_frame(
+                        time.max(-3.0),
+                        frame_time,
+                        intro_destination,
+                        &mut uniforms,
+                    );
+                    if time >= 27.0 {
+                        intro_time = None;
+                    }
+                } else if weapon_blocked && let Some(target) = weapon.target.or(previous_target) {
                     movement.weapon_station(
                         &previous_target.unwrap_or(target),
                         &target,
@@ -364,7 +395,7 @@ fn main() {
                 uniforms.light_position = world.primary_light_position();
                 interaction.update(&mut world, &uniforms, input.interact_pressed, frame_time);
                 rocket_audio.update(
-                    input.thrust,
+                    input.thrust || intro_active,
                     input.braking,
                     movement.is_moving() && !travel.open && !weapon_blocked,
                     movement.can_accelerate(),
@@ -398,7 +429,7 @@ fn main() {
                 framebuffer.present_with_overlay_bottom(
                     &mut window,
                     &thread,
-                    if travel.open || weapon_blocked {
+                    if intro_active || travel.open || weapon_blocked {
                         None
                     } else {
                         interaction.overlay()
@@ -406,7 +437,7 @@ fn main() {
                     if radio_visible { PANEL_HEIGHT + 32 } else { 14 },
                     |d| {
                         travel.draw(d, vehicle.kind, &targets, jump_flash);
-                        if !travel.open && !weapon_blocked {
+                        if !intro_active && !travel.open && !weapon_blocked {
                             movement.draw_navigation(d);
                         }
                         if !travel.open
@@ -414,19 +445,20 @@ fn main() {
                         {
                             alien.draw_hud(d);
                         }
-                        if let Some(radio) = &radio {
+                        if !intro_active && let Some(radio) = &radio {
                             radio.draw(d);
                         }
                         if is_destroyer && !travel.open {
                             weapon.draw_hud(d, aim, &draw_uniforms);
                         }
                         if let Some(car_weapons) = &car_weapons
+                            && !intro_active
                             && !travel.open
                         {
                             car_weapons.draw_hud(d, &draw_uniforms);
                             planet_finder.draw(d, &world, &draw_uniforms);
                         }
-                        if !travel.open && !weapon_blocked {
+                        if !intro_active && !travel.open && !weapon_blocked {
                             draw_flight_status(
                                 d,
                                 world.travel_targets().len(),
@@ -438,6 +470,9 @@ fn main() {
                         draw_hangar_return(d);
                         if let Some(car_weapons) = &car_weapons {
                             car_weapons.draw_finale(d);
+                        }
+                        if intro_fade > 0 {
+                            d.draw_rectangle(0, 0, 800, 600, Color::new(0, 0, 0, intro_fade));
                         }
                     },
                 );
