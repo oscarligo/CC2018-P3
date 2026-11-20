@@ -52,9 +52,7 @@ impl Shuffle {
         ((self.unit() * len as f32) as usize).min(len - 1)
     }
     fn offset(&mut self, duration: f32) -> f32 {
-        let earliest = (duration * 0.08).min(12.0);
-        let latest = duration - (duration * 0.25).min(30.0);
-        earliest + (latest - earliest).max(0.0) * self.unit()
+        duration * (0.25 + 0.5 * self.unit())
     }
 }
 
@@ -64,6 +62,10 @@ fn discover(directory: &Path) -> std::io::Result<Vec<PathBuf>> {
         let entry = entry?;
         let path = entry.path();
         if entry.file_type()?.is_file()
+            && !path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.eq_ignore_ascii_case("Intro.mp3"))
             && path
                 .extension()
                 .and_then(|e| e.to_str())
@@ -186,7 +188,12 @@ impl<'a> RadioPlayer<'a> {
             .unwrap_or_else(|| self.shuffle.offset(duration))
             .clamp(0.0, (duration - 0.05).max(0.0));
         music.set_looping(false);
-        music.set_volume(self.volume);
+        let gain = if path.file_name().and_then(|name| name.to_str()) == Some("Intro.mp3") {
+            0.5
+        } else {
+            1.0
+        };
+        music.set_volume(self.volume * gain);
         if let Some(old) = self.music.take() {
             old.stop_stream();
         }
@@ -330,6 +337,7 @@ struct RadioStatus {
 }
 enum Request {
     Toggle,
+    Intro,
     Control(Button),
     Shutdown,
 }
@@ -372,6 +380,17 @@ impl<'scope> CarRadio<'scope> {
                         revision = id;
                         match request {
                             Request::Toggle => player.toggle(),
+                            Request::Intro => {
+                                player.visible = true;
+                                player.paused = false;
+                                player.tracks = discover(Path::new(DIRECTORY)).unwrap_or_default();
+                                let path = Path::new(DIRECTORY).join("Intro.mp3");
+                                if let Some(start) = player.open(&path, Some(0.0)) {
+                                    player.remember(Selection { path, start });
+                                } else {
+                                    player.random_track();
+                                }
+                            }
                             Request::Control(Button::Previous) => player.previous(),
                             Request::Control(Button::Pause) => player.pause(),
                             Request::Control(Button::Next) => player.next(),
@@ -402,6 +421,19 @@ impl<'scope> CarRadio<'scope> {
             hover: None,
         }
     }
+    pub fn start_intro(&mut self) {
+        self.visible = true;
+        self.send(Request::Intro);
+    }
+
+    pub fn intro_ready(&self) -> bool {
+        !self.pending()
+    }
+
+    pub fn poll_intro(&mut self) {
+        self.poll();
+    }
+
     fn pending(&self) -> bool {
         self.status.revision < self.revision
     }
@@ -704,7 +736,7 @@ mod tests {
             assert!(
                 offsets
                     .iter()
-                    .all(|t| *t > 0.0 && *t <= duration - (duration * 0.25).min(30.0))
+                    .all(|t| *t >= duration * 0.25 && *t <= duration * 0.75)
             );
             assert!(
                 offsets
@@ -720,14 +752,14 @@ mod tests {
             .join("target")
             .join(format!("radio-scan-{}", std::process::id()));
         fs::create_dir_all(&directory).unwrap();
-        for name in ["first.mp3", "SECOND.MP3", "cover.png"] {
+        for name in ["first.mp3", "SECOND.MP3", "cover.png", "Intro.mp3"] {
             fs::write(directory.join(name), b"test").unwrap();
         }
         fs::create_dir_all(directory.join("folder.mp3")).unwrap();
         let files = discover(&directory).unwrap();
         assert_eq!(files.len(), 2);
         assert!(files.iter().all(|p| p.is_file()));
-        for name in ["first.mp3", "SECOND.MP3", "cover.png"] {
+        for name in ["first.mp3", "SECOND.MP3", "cover.png", "Intro.mp3"] {
             fs::remove_file(directory.join(name)).unwrap();
         }
         fs::remove_dir(directory.join("folder.mp3")).unwrap();

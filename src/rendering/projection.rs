@@ -2,7 +2,7 @@ use raylib::prelude::{Vector2, Vector3};
 
 use crate::rendering::uniforms::Uniforms;
 
-pub(crate) const NEAR_CLIP_DISTANCE: f32 = 1.0;
+pub(crate) const NEAR_CLIP_DISTANCE: f32 = 0.05;
 const VERTICAL_FOV: f32 = 60.0_f32.to_radians();
 
 pub fn project_vertex(
@@ -14,22 +14,41 @@ pub fn project_vertex(
     height: f32,
 ) -> Option<(Vector2, f32)> {
     let forward = normalize(camera_target - camera_pos)?;
-    let right = normalize(cross(camera_up, forward))?;
-    let up = cross(forward, right);
-    let relative = vertex - camera_pos;
-    let camera_x = dot(relative, right);
-    let camera_y = dot(relative, up);
-    let depth = dot(relative, forward);
+    let depth = dot(vertex - camera_pos, forward);
+    let position = project_at_depth(
+        vertex,
+        camera_pos,
+        camera_target,
+        camera_up,
+        width,
+        height,
+        depth,
+    )?;
+    Some((position, depth))
+}
 
+// Clipped vertices already have an exact depth; do not recalculate it from rounded world coordinates.
+pub(crate) fn project_at_depth(
+    vertex: Vector3,
+    camera_pos: Vector3,
+    camera_target: Vector3,
+    camera_up: Vector3,
+    width: f32,
+    height: f32,
+    depth: f32,
+) -> Option<Vector2> {
     if depth < NEAR_CLIP_DISTANCE {
         return None;
     }
-
+    let forward = normalize(camera_target - camera_pos)?;
+    let right = normalize(cross(camera_up, forward))?;
+    let up = cross(forward, right);
+    let relative = vertex - camera_pos;
     let focal_length = height * 0.5 / (VERTICAL_FOV * 0.5).tan();
-    let x = camera_x / depth * focal_length + width * 0.5;
-    let y = -camera_y / depth * focal_length + height * 0.5;
-
-    Some((Vector2::new(x, y), depth))
+    Some(Vector2::new(
+        dot(relative, right) / depth * focal_length + width * 0.5,
+        -dot(relative, up) / depth * focal_length + height * 0.5,
+    ))
 }
 
 pub fn camera_depth(vertex: Vector3, uniforms: &Uniforms) -> Option<f32> {

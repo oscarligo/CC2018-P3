@@ -1,5 +1,5 @@
 use crate::rendering::fragment::Fragment;
-use crate::rendering::projection::{NEAR_CLIP_DISTANCE, project_vertex};
+use crate::rendering::projection::{NEAR_CLIP_DISTANCE, project_at_depth};
 use crate::rendering::triangle::{is_back_facing, triangle_scanline};
 use crate::rendering::uniforms::Uniforms;
 use crate::rendering::vertex::Vertex;
@@ -49,18 +49,18 @@ pub fn rasterize_indexed(
             let mut triangle = [polygon[0], polygon[index], polygon[index + 1]];
             for vertex in &mut triangle {
                 if vertex.screen_position.is_none() {
-                    let Some((position, depth)) = project_vertex(
+                    let Some(position) = project_at_depth(
                         vertex.transformed_position,
                         uniforms.camera_pos,
                         uniforms.camera_target,
                         uniforms.camera_up,
                         width as f32,
                         height as f32,
+                        vertex.camera_depth,
                     ) else {
                         continue;
                     };
                     vertex.screen_position = Some(position);
-                    vertex.camera_depth = depth;
                 }
             }
             let [a, b, c] = &triangle;
@@ -140,6 +140,47 @@ mod tests {
         vertex.transformed_position = vertex.position;
         vertex.camera_depth = depth;
         vertex
+    }
+
+    #[test]
+    fn close_triangles_and_near_plane_intersections_still_render() {
+        use raylib::prelude::{Matrix, Vector3};
+        let camera = Vector3::new(0.0, 0.0, 6000.0);
+        let uniforms = Uniforms {
+            model_matrix: Matrix::identity(),
+            camera_pos: camera,
+            camera_target: camera + Vector3::new(0.0, 0.0, 1.0),
+            camera_up: Vector3::new(0.0, 1.0, 0.0),
+            light_position: None,
+        };
+        for front_depth in [0.02, 0.15] {
+            let vertices = [
+                (-0.08, -0.08, 0.2),
+                (0.08, -0.08, 0.2),
+                (0.0, 0.08, front_depth),
+            ]
+            .map(|(x, y, z)| {
+                let mut v = vertex(z);
+                v.transformed_position = camera + Vector3::new(x, y, z);
+                v
+            });
+            let mut fragments = 0;
+            let stats = rasterize_indexed(
+                &vertices,
+                &[0, 1, 2, 2, 1, 0],
+                80,
+                60,
+                &uniforms,
+                false,
+                false,
+                |f| {
+                    assert!(f.depth.is_finite());
+                    fragments += 1;
+                },
+            );
+            assert_eq!(stats.near_rejected_triangles, 0);
+            assert!(fragments > 0);
+        }
     }
 
     #[test]

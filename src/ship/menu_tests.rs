@@ -80,6 +80,7 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
             &mut renderer,
             &mut vehicles,
             initial,
+            false,
             |_, frame| {
                 assert!(frame < 5, "El hangar debe aceptar las entradas simuladas");
                 events[6].play();
@@ -103,6 +104,7 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
         &mut renderer,
         &mut vehicles,
         0,
+        false,
         |_, frame| {
             assert!(frame < 3);
             events[6].play();

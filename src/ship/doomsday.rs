@@ -393,7 +393,7 @@ impl Doomsday {
 }
 
 #[path = "doomsday_hud.rs"]
-mod hud;
+pub(crate) mod hud;
 #[path = "doomsday_preview.rs"]
 mod preview;
 pub use preview::preview;

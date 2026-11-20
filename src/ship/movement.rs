@@ -7,6 +7,8 @@ use crate::ship::input::InputState;
 use raylib::prelude::*;
 
 mod collision;
+mod intro;
+pub(crate) use intro::entry_fade;
 mod local_flight;
 mod navigation;
 mod presentation;
