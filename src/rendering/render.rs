@@ -10,6 +10,7 @@ use crate::rendering::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::time::Instant;
 
+type FragmentShader<'a> = &'a dyn Fn(&Fragment) -> Option<Vector3>;
 const FOG_START: f32 = 2_500.0;
 const FOG_END: f32 = 14_000.0;
 const FOG_MAX_STRENGTH: f32 = 0.82;
@@ -215,7 +216,7 @@ impl Renderer {
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
         mode: RenderMode,
-        surface_shader: Option<&dyn Fn(&Fragment) -> Option<Vector3>>,
+        surface_shader: Option<FragmentShader<'_>>,
     ) {
         let transparent = mode == RenderMode::Transparent;
         let width = framebuffer.width as f32;

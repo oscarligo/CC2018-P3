@@ -15,7 +15,7 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
     std::fs::write(
         path,
         concat!(
-            "c 12\n",
+            "c 15\n",
             "e 0 2 290 0 0 0\n", // F1 down
             "e 0 2 262 0 0 0\n", // right down
             "e 0 2 257 0 0 0\n", // enter down
@@ -28,11 +28,14 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
             "e 0 6 0 0 0 0\n",    // left mouse down
             "e 0 5 0 0 0 0\n",
             "e 0 7 400 300 0 0\n", // pointer outside return button
+            "e 0 2 51 0 0 0\n",    // third vehicle key down
+            "e 0 1 51 0 0 0\n",    // third vehicle key up
+            "e 0 7 650 450 0 0\n", // third vehicle button
         ),
     )
     .unwrap();
     let list = window.load_automation_event_list(Some(path.into()));
-    assert_eq!(list.count(), 12);
+    assert_eq!(list.count(), 15);
     let events = list.events();
     let mut fb = Framebuffer::new(800, 600, Color::BLACK);
     let mut renderer = Renderer::default();
@@ -96,6 +99,44 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
         assert_eq!(selected, Some((initial + 1) % 3));
         assert_eq!(world.travel_targets().len(), targets.len());
     }
+    // The third mode must be reachable directly, not only through arrow cycling.
+    for use_mouse in [false, true] {
+        let selected = choose_vehicle_with_input(
+            &mut window,
+            &thread,
+            &mut fb,
+            &mut renderer,
+            &mut vehicles,
+            0,
+            |_, frame| {
+                assert!(frame < 4);
+                for i in [5, 6, 7, 10, 13] {
+                    events[i].play();
+                }
+                if frame == 1 {
+                    if use_mouse {
+                        events[14].play();
+                        events[9].play();
+                    } else {
+                        events[12].play();
+                    }
+                }
+                if frame == 2 {
+                    events[2].play();
+                }
+            },
+        );
+        assert_eq!(selected, Some(2));
+        assert_eq!(vehicles[selected.unwrap()].kind, VehicleKind::Destroyer);
+    }
+    // Losing the last planet must close any jump menu and allow F8/hangar controls again.
+    for kind in [VehicleKind::Saucer, VehicleKind::Destroyer] {
+        for open in [false, true] {
+            let mut travel = TravelMenu { open, selected: 17 };
+            assert_eq!(travel.update(&mut window, kind, true, &[]), None);
+            assert!(!travel.open);
+        }
+    }
     window.take_screenshot(&thread, "target/previews/hangar-return-menu.png");
     let result = choose_vehicle_with_input(
         &mut window,
@@ -114,4 +155,15 @@ fn return_to_hangar_and_reselect_without_reopening_the_window() {
         },
     );
     assert_eq!(result, None);
+    let travel = TravelMenu {
+        open: true,
+        selected: 0,
+    };
+    for _ in 0..2 {
+        fb.clear();
+        fb.present(&mut window, &thread, None, |d| {
+            travel.draw(d, VehicleKind::Saucer, &targets, 0.)
+        });
+    }
+    window.take_screenshot(&thread, "target/previews/travel-groups.png");
 }
