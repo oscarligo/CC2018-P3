@@ -414,7 +414,10 @@ fn main() {
                 vehicle.braking = input.braking;
                 vehicle.draw(&mut renderer, &mut framebuffer, &draw_uniforms, elapsed);
                 movement.draw_trail(&mut framebuffer, &draw_uniforms);
-                movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
+                // Chemax uses its cyan engine lights instead of the generic flame exhaust.
+                if !is_destroyer {
+                    movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
+                }
                 if let Some(car_weapons) = &car_weapons {
                     car_weapons.draw(&mut framebuffer, &draw_uniforms, &world);
                 }
@@ -461,6 +464,7 @@ fn main() {
                         if !intro_active && !travel.open && !weapon_blocked {
                             draw_flight_status(
                                 d,
+                                vehicle.kind,
                                 world.travel_targets().len(),
                                 total_planets,
                                 movement.speed(),
@@ -501,37 +505,44 @@ fn speed_meter_fill(speed_multiple: f32) -> f32 {
 
 fn draw_flight_status(
     d: &mut RaylibDrawHandle,
+    kind: ship::vehicle::VehicleKind,
     remaining_planets: usize,
     total_planets: usize,
     speed: f32,
     speed_multiple: f32,
 ) {
     const X: i32 = 16;
-    const Y: i32 = 558;
+    // Chemax reserves the bottom for weapon controls and reactor notices.
+    // Keep the other vehicles' layout clear of their upper HUDs and radio.
+    let y = if kind == ship::vehicle::VehicleKind::Destroyer {
+        92
+    } else {
+        558
+    };
     const WIDTH: i32 = 400;
     const HEIGHT: i32 = 28;
     const BAR_X: i32 = 254;
     const BAR_WIDTH: i32 = 146;
 
-    d.draw_rectangle(X, Y, WIDTH, HEIGHT, Color::new(5, 14, 30, 225));
-    d.draw_rectangle_lines(X, Y, WIDTH, HEIGHT, Color::new(74, 125, 174, 230));
+    d.draw_rectangle(X, y, WIDTH, HEIGHT, Color::new(5, 14, 30, 225));
+    d.draw_rectangle_lines(X, y, WIDTH, HEIGHT, Color::new(74, 125, 174, 230));
     d.draw_text(
         &format!("PLANETAS {remaining_planets}/{total_planets}"),
         X + 10,
-        Y + 7,
+        y + 7,
         14,
         Color::new(224, 236, 246, 255),
     );
     d.draw_text(
         &format!("VEL {speed:.0}"),
         X + 132,
-        Y + 7,
+        y + 7,
         14,
         Color::new(224, 236, 246, 255),
     );
-    d.draw_rectangle(BAR_X, Y + 8, BAR_WIDTH, 12, Color::new(12, 29, 48, 255));
+    d.draw_rectangle(BAR_X, y + 8, BAR_WIDTH, 12, Color::new(12, 29, 48, 255));
     let fill = (BAR_WIDTH as f32 * speed_meter_fill(speed_multiple).clamp(0.0, 1.0)) as i32;
-    d.draw_rectangle(BAR_X, Y + 8, fill, 12, Color::new(100, 220, 255, 255));
+    d.draw_rectangle(BAR_X, y + 8, fill, 12, Color::new(100, 220, 255, 255));
 }
 
 fn model_point(m: &Matrix, p: Vector3) -> Vector3 {
@@ -739,7 +750,14 @@ fn preview_dyson() {
         if label == "dyson-interior" {
             u = objects::dyson::interior_view(sun, world.primary_light_bounds().unwrap().1, time);
         }
-        let mut fb = Framebuffer::new(1200, 800, Color::new(3, 7, 15, 255));
+        let mut fb = Framebuffer::new(1800, 1200, Color::new(3, 7, 15, 255));
+        // Let distance-based detail transitions finish before saving the capture.
+        let mut renderer = Renderer::default();
+        world.draw(&mut renderer, &mut fb, &u);
+        for _ in 0..90 {
+            world.update(&WorldUpdate { frame_time: 1.0 / 60.0 });
+        }
+        fb.clear();
         Starfield::new().draw(&mut fb, &u);
         world.draw(&mut Renderer::default(), &mut fb, &u);
         fb.save_png(format!("target/previews/{label}.png"))

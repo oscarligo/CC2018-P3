@@ -109,6 +109,7 @@ pub fn preview() {
             crate::model_point(&m, Vector3::zero()),
             Vector3::new(m.m8, m.m9, m.m10),
         );
+        let total_planets = build_solar_system().travel_targets().len();
         for _ in 0..2 {
             fb.present(window, thread, None, |d| {
                 crate::ship::menu::TravelMenu::default().draw(
@@ -118,6 +119,16 @@ pub fn preview() {
                     0.,
                 );
                 w.draw_hud(d, aim, &u);
+                if !w.busy() {
+                    crate::draw_flight_status(
+                        d,
+                        crate::ship::vehicle::VehicleKind::Destroyer,
+                        world.travel_targets().len(),
+                        total_planets,
+                        0.,
+                        0.,
+                    );
+                }
             });
         }
         let path = format!("target/previews/destroyer-{name}.png");
