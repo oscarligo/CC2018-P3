@@ -1,6 +1,13 @@
+
 # CC2018 — Proyecto 3: Space Travel
 
 Aplicación en Rust para recorrer un sistema solar con una nave y cámara en tercera persona. La geometría, proyección, rasterización, profundidad y shaders se calculan en CPU con un renderer propio; raylib proporciona la ventana, la entrada y el audio.
+
+## Autores
+
+1. Oscar Rodrigo Rompich Cotzojay - 24880
+2. José Manuel Sanchez Hernández - 24092
+3. Jorge Andrés Villeda Solís - 24932
 
 ## Funcionalidades implementadas
 
