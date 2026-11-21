@@ -1,6 +1,6 @@
 # Gráficas por Computadora - Proyecto final: Space Travel
 
-**Enlace al video del funcionamiento:**
+**Enlace al video del funcionamiento: https://youtu.be/s4NzFhpydV8**
 
 Aplicación en Rust para explorar un sistema solar desde una nave. Permite viajar por el espacio, acercarse a los planetas, rodearlos y alejarse sin cambiar de escena. Incluye tres vehículos, superficies distintas, construcciones, vegetación y efectos animados.
 
@@ -94,7 +94,7 @@ Los comandos escritos, como `3.14`, `achu`, `mishmish` y `fm`, se activan al com
 | Sol, nave propia y planeta con órbita y rotación | El sistema incluye estos elementos. Jor-Jor Gé se genera con geometría propia y El Chemax utiliza modelos propios. Los movimientos dependen del tiempo transcurrido entre cuadros. |
 | Acercamiento y alejamiento sin cambiar de escena | El vuelo libre y el sobrevuelo permiten recorrer los planetas dentro del mismo mundo, con control de la nave y la cámara. |
 | Modelos, transformaciones y shader de fragmentos propio | Se cargan archivos OBJ y se aplican transformaciones de modelo, vista y proyección, con prueba de profundidad. Kashyyyk, Coruscant y Ureski tienen sombreado propio por fragmento. |
-| Código, recursos, instrucciones y video | El código está en `src/`, los recursos en `assets/` y las instrucciones en este documento. El enlace del video queda pendiente. |
+| Código, recursos, instrucciones y video | El código está en `src/`, los recursos en `assets/` y las instrucciones en este documento. El video está enlazado al inicio de este documento. |
 
 ## Características solicitadas para evaluación
 
@@ -221,6 +221,29 @@ Los resultados dependen del equipo y de la escena. Miden trabajo de CPU y no gar
 | Biblioteca de efectos de sonido | [The Sounds Resource](https://sounds.spriters-resource.com/) | Utilizada como fuente de efectos de sonido. |
 
 Las dependencias se declaran en `Cargo.toml` y sus versiones se registran en `Cargo.lock`.
+
+### Música de la radio
+
+Los archivos se encuentran en `assets/radio/`. Estos enlaces corresponden a videos de las canciones identificadas por su título.
+
+| Canción | Artista | Video en YouTube |
+| --- | --- | --- |
+| Around the World | Daft Punk | [Ver video](https://www.youtube.com/watch?v=K0HSD_i2DvA) |
+| Cómo te voy a olvidar | Los Ángeles Azules | [Ver video](https://www.youtube.com/watch?v=nxXvOEPsE0s) |
+| Blue | Eiffel 65 | [Ver video](https://www.youtube.com/watch?v=zA52uNzx7Y4) |
+| Rosa Pastel | Belanova | [Ver video](https://www.youtube.com/watch?v=bUkJLkoh3kA) |
+| Starman | David Bowie | [Ver video](https://www.youtube.com/watch?v=rpO1U-nEgRU) |
+| Still D.R.E. | Dr. Dre y Snoop Dogg | [Ver video](https://www.youtube.com/watch?v=_CL6n0FJZpk) |
+| Thunderstruck | AC/DC | [Ver video](https://www.youtube.com/watch?v=v2AC41dglnM) |
+| Tu falta de querer | Mon Laferte | [Ver video](https://www.youtube.com/watch?v=WT-VE9OyAJk) |
+| Virgen | Adolescent's Orquesta | [Ver video](https://www.youtube.com/watch?v=pz9O3UeM_o0) |
+| Never Gonna Give You Up | Rick Astley | [Ver video](https://www.youtube.com/watch?v=dQw4w9WgXcQ) |
+| Himno Nacional de Guatemala | Música de Rafael Álvarez Ovalle y letra de José Joaquín Palma | [Ver video](https://www.youtube.com/watch?v=PHOBQw9cVw8) |
+| Mark of the Beast | Polyphia | [Ver video](https://www.youtube.com/watch?v=n4vsc-KQJHQ) |
+| Tercer Tipo | Enjambre | [Ver video](https://www.youtube.com/watch?v=nxkfVakeFag) |
+| Clair de Lune | Claude Debussy | [Ver video](https://www.youtube.com/watch?v=WNcsUNKlAKw) |
+
+`Estación Intergalactica.mp3` utiliza un audio de Meme Random.
 
 ### Asistencia de IA
 
