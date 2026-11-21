@@ -113,6 +113,38 @@ Selecciona `1` para Rampage, `2` para Jor-Jor Gé o `3` para El Chemax y pulsa `
 
 Para una demostración rápida, elige Jor-Jor Gé, escribe `3.14`, visita uno de los cuatro mundos principales y activa `L`. Prueba el giro, zoom, inspección y frenado; repite en otro mundo para comparar superficies y órbitas.
 
-Las capturas incluidas se generaron con los modos existentes `--preview-ships`, `--preview-dyson`, `--preview-persona3`, `--preview-alien`, `--benchmark-coruscant --capturas` y `--benchmark-kashyyyk --capturas`. Estos guardan los originales en `target/`; la selección documentada se conserva en [`demo/`](demo/).
+## Estructura del proyecto
 
-Los modelos originales de Jor-Jor Gé, El Chemax, flora, fauna y estaciones se desarrollaron para el proyecto con asistencia de Codex/IA.
+El código se organiza por responsabilidades. Este árbol resume las carpetas y archivos principales:
+
+```text
+CC2018-P3/
+├── Cargo.toml               # Dependencias y configuración de compilación
+├── Cargo.lock               # Versiones exactas de las dependencias
+├── Readme.md                # Documentación y guía de ejecución
+├── assets/                  # Modelos OBJ/MTL, texturas y audio
+│   ├── audio/               # Recursos de sonido
+│   ├── radio/               # Canciones MP3 para la radio de Rampage
+│   └── textures/            # Texturas de los modelos
+├── demo/                    # Capturas de las funcionalidades documentadas
+└── src/
+    ├── main.rs              # Inicio, ciclo principal y modos de demostración
+    ├── display.rs           # Presentación en ventana, pantalla completa y CRT
+    ├── noise.rs             # Ruido procedural para superficies y detalles
+    ├── performance.rs       # Métricas de tiempo, geometría y fragmentos
+    ├── celestial_shaders/   # Apariencia de estrellas y planetas rocosos o gaseosos
+    ├── rendering/           # Pipeline de renderizado por software
+    ├── objects/             # Cuerpos celestes, atmósferas, anillos y aros Dyson
+    ├── physics/             # Volúmenes y consultas de colisión
+    ├── interaction/         # Selección e inspección de cuerpos celestes
+    ├── scene/               # Composición y actualización del mundo
+    │   └── planets/         # Kashyyyk, Coruscant, Ureski y Alfa Riddertal
+    └── ship/                # Vehículos, cámara, controles, menús, efectos y audio
+        └── movement/        # Vuelo, sobrevuelo, viajes, colisiones e introducción
+```
+
+**Renderizado:** `rendering/` carga geometría, transforma y proyecta vértices, rasteriza triángulos y resuelve color y profundidad en el framebuffer. `celestial_shaders/` define las superficies procedurales de los cuerpos celestes.
+
+**Mundo y simulación:** `scene/` reúne el sistema solar, las órbitas, el fondo estelar y los escombros. `objects/` contiene el catálogo y los elementos renderizables; `scene/planets/` agrega las superficies y construcciones particulares de los mundos. `physics/` e `interaction/` permiten detectar choques e inspeccionar cuerpos.
+
+**Vehículos y presentación:** `ship/` implementa Rampage, Jor-Jor Gé y El Chemax, junto con navegación, armas, radio y efectos. `display.rs` presenta la imagen final, mientras `performance.rs` registra el costo del renderizado. Los recursos se guardan en `assets/` y las capturas del documento en `demo/`.
