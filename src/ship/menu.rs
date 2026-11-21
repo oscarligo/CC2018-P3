@@ -4,6 +4,9 @@ use crate::{
     scene::{Starfield, world::TravelTarget},
 };
 use raylib::prelude::*;
+#[path = "travel_list.rs"]
+mod travel_list;
+use travel_list::TravelList;
 
 const MINT: Color = Color::new(115, 195, 255, 255);
 const MUTED: Color = Color::new(158, 179, 194, 255);
@@ -168,15 +171,15 @@ pub(super) fn draw_hangar(d: &mut RaylibDrawHandle, selected: usize) {
     text(d, "Elige tu nave", 48, 56, 34, Color::RAYWHITE);
     text(d, &format!("0{} / 03", selected + 1), 660, 66, 18, MUTED);
     d.draw_rectangle(0, 415, 800, 185, Color::new(7, 13, 22, 235));
-    button(d, 28, 430, 240, "1  CARRO ORIGINAL", selected == 0);
-    button(d, 280, 430, 240, "2  OVNI / GATO ALIEN", selected == 1);
-    button(d, 532, 430, 240, "3  DESTRUCTOR ESTELAR", selected == 2);
+    button(d, 28, 430, 240, "1  Rampage", selected == 0);
+    button(d, 280, 430, 240, "2  Jor-Jor Gé", selected == 1);
+    button(d, 532, 430, 240, "3  El Chemax", selected == 2);
     let info = if selected == 0 {
         "Vuelo clasico / Velocidad 1x / fm: radio del carro"
     } else if selected == 1 {
         "Espacio: acelerar / R: giro / mishmish: punteria / achu"
     } else {
-        "Destructor Estelar / B: bomba / J: cargar / 3.14: viajar"
+        "El Chemax / B: bomba / J: cargar / 3.14: viajar"
     };
     text(d, info, 48, 498, 16, MUTED);
     button(d, 260, 530, 280, "DESPEGAR  [ENTER]", true);
@@ -195,12 +198,19 @@ impl TravelMenu {
         requested: bool,
         targets: &[TravelTarget],
     ) -> Option<usize> {
+        // A destroyed system has no jump destinations. Never leave flight blocked by an empty menu.
+        if targets.is_empty() {
+            self.open = false;
+            self.selected = 0;
+            return None;
+        }
         if kind != VehicleKind::Car && requested {
             self.open = true;
         }
-        if !self.open || targets.is_empty() {
+        if !self.open {
             return None;
         }
+        let list = TravelList::new(targets);
         self.selected = self.selected.min(targets.len() - 1);
         if window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
             self.open = false;
@@ -213,22 +223,19 @@ impl TravelMenu {
         if window.is_key_pressed(KeyboardKey::KEY_UP) || wheel > 0.0 {
             self.selected = (self.selected + targets.len() - 1) % targets.len();
         }
-        let page = self.selected / 8 * 8;
         if window.is_mouse_button_pressed(MouseButton::MOUSE_BUTTON_LEFT) {
             let p = window.get_mouse_position();
-            for row in 0..8 {
-                if page + row < targets.len() && inside(p, 128, 148 + row as i32 * 38, 544, 34) {
-                    self.selected = page + row;
-                }
+            if let Some(index) = list.hit(p.x, p.y, self.selected) {
+                self.selected = index;
             }
             if inside(p, 260, 506, 280, 52) {
                 self.open = false;
-                return Some(self.selected);
+                return Some(list.order[self.selected]);
             }
         }
         if window.is_key_pressed(KeyboardKey::KEY_ENTER) {
             self.open = false;
-            return Some(self.selected);
+            return Some(list.order[self.selected]);
         }
         None
     }
@@ -253,7 +260,9 @@ impl TravelMenu {
             d.draw_rectangle(16, 16, 370, 30, Color::new(7, 13, 22, 190));
             text(
                 d,
-                if kind == VehicleKind::Saucer {
+                if targets.is_empty() && kind != VehicleKind::Car {
+                    "SIN DESTINOS / F1: cambiar nave"
+                } else if kind == VehicleKind::Saucer {
                     "OVNI  /  3x  /  Teletransporte: 3.14"
                 } else if kind == VehicleKind::Destroyer {
                     "DESTRUCTOR ESTELAR  /  B: bomba"
@@ -276,26 +285,47 @@ impl TravelMenu {
         d.draw_rectangle_lines(108, 48, 584, 528, MINT);
         text(d, "3.14 / MOTOR DE SALTO", 132, 69, 16, MINT);
         text(d, "Elige un destino", 132, 96, 30, Color::RAYWHITE);
-        let page = self.selected / 8 * 8;
-        for (row, target) in targets.iter().skip(page).take(8).enumerate() {
-            let y = 148 + row as i32 * 38;
-            if page + row == self.selected {
-                d.draw_rectangle(128, y, 544, 34, Color::new(25, 58, 108, 255));
+        let list = TravelList::new(targets);
+        let selected = self.selected.min(targets.len().saturating_sub(1));
+        text(d, "MUNDOS PRINCIPALES", 132, 126, 14, MINT);
+        d.draw_line(132, 276, 668, 276, Color::new(53, 90, 123, 255));
+        text(
+            d,
+            &format!(
+                "OTROS DESTINOS  /  {}/{}",
+                list.page(selected) + 1,
+                list.pages()
+            ),
+            132,
+            288,
+            14,
+            MUTED,
+        );
+        if list.featured == 0 {
+            text(d, "No disponibles", 140, 154, 16, MUTED);
+        }
+        if list.featured == targets.len() {
+            text(d, "No hay otros destinos", 140, 318, 16, MUTED);
+        }
+        for (index, original, y) in list.rows(selected) {
+            let target = &targets[original];
+            if index == selected {
+                d.draw_rectangle(128, y, 544, 28, Color::new(25, 58, 108, 255));
             }
             text(
                 d,
-                &format!("{:02}   {}", page + row + 1, target.name),
+                &format!("{:02}   {}", index + 1, target.name),
                 140,
-                y + 8,
-                18,
-                if page + row == self.selected {
+                y + 6,
+                17,
+                if index == selected {
                     MINT
                 } else {
                     Color::RAYWHITE
                 },
             );
         }
-        if let Some(t) = targets.get(self.selected) {
+        if let Some(t) = list.order.get(selected).and_then(|&i| targets.get(i)) {
             text(
                 d,
                 &format!(
@@ -312,8 +342,8 @@ impl TravelMenu {
             d,
             &format!(
                 "Flechas / rueda  |  Pagina {}/{}  |  Esc: volver",
-                self.selected / 8 + 1,
-                targets.len().div_ceil(8)
+                list.page(selected) + 1,
+                list.pages()
             ),
             132,
             485,

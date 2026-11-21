@@ -10,6 +10,8 @@ use crate::rendering::vertex::Vertex;
 use raylib::prelude::Vector3;
 use std::time::Instant;
 
+type FragmentShader<'a> = &'a dyn Fn(&Fragment) -> Option<Vector3>;
+
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum RenderMode {
     Opaque,
@@ -200,7 +202,7 @@ impl Renderer {
         colors: Option<&[raylib::prelude::Vector3]>,
         alphas: Option<&[f32]>,
         mode: RenderMode,
-        surface_shader: Option<&dyn Fn(&Fragment) -> Option<Vector3>>,
+        surface_shader: Option<FragmentShader<'_>>,
     ) {
         let transparent = mode == RenderMode::Transparent;
         let width = framebuffer.width as f32;

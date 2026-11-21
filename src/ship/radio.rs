@@ -441,7 +441,10 @@ impl<'scope> CarRadio<'scope> {
             return false;
         }
         let p = window.get_mouse_position();
-        let area = panel(window.get_screen_width(), window.get_screen_height());
+        let area = panel(
+            crate::display::CONTENT_WIDTH,
+            crate::display::CONTENT_HEIGHT,
+        );
         self.hover = [Button::Previous, Button::Pause, Button::Next]
             .into_iter()
             .enumerate()
@@ -457,7 +460,10 @@ impl<'scope> CarRadio<'scope> {
         if !self.visible {
             return;
         }
-        let area = panel(d.get_screen_width(), d.get_screen_height());
+        let area = panel(
+            crate::display::CONTENT_WIDTH,
+            crate::display::CONTENT_HEIGHT,
+        );
         let x = area.x as i32;
         let y = area.y as i32;
         let blue = Color::new(139, 209, 255, 255);

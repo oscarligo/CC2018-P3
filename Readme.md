@@ -19,7 +19,7 @@ clic y pulsa `Enter` o **Despegar**:
 - **Ovni / gato alien:** platillo metálico con luces verdes, cúpula transparente
   y piloto felino con antenas. Su aceleración y velocidad máxima son tres veces
   las del carro; sus partículas y estelas son verdes.
-- **Destructor Estelar:** nave original inspirada en un Destructor Estelar, con
+- **Nave maligna / Destructor Estelar (3):** nave original inspirada en un Destructor Estelar, con
   casco triangular, ciudadela escalonada, puente, cúpulas, torretas, motores azules
   y una bahía ventral animada para la bomba planetaria.
 
@@ -32,7 +32,7 @@ secuencia de la bomba en curso. **Esc** sigue cerrando el juego fuera de los men
 
 ### Destructor Estelar y bomba planetaria
 
-Selecciona **3** en el hangar. Conserva los controles de vuelo y el vuelo local
+Selecciona **3 — Nave maligna** en el hangar. Conserva los controles de vuelo y el vuelo local
 con `L`; también permite viajar escribiendo `3.14`, igual que el ovni.
 Apunta la mira de la proa hacia un planeta cercano: aparecerán su nombre y
 unas esquinas rojas alrededor del objetivo. El sol no es un objetivo válido.
@@ -183,7 +183,8 @@ de flora, fauna y estaciones son propios del proyecto, sin descargas externas.
 
 Durante el vuelo, escribe la secuencia `3.14` (sin Enter, en menos de cinco
 segundos entre caracteres). También acepta la coma decimal del teclado numérico.
-Se abre un menú con los 18 destinos principales, incluidos Kashyyyk y Coruscant.
+Se abre un menú dividido en **Mundos principales** (Kashyyyk, Coruscant,
+Ureski y Alfa Riddertal, siempre visibles) y **Otros destinos** (paginados).
 Usa flechas, rueda o clic para seleccionar y **Enter / Teletransportar** para saltar;
 `Esc` cancela. Las flechas y la rueda recorren las páginas del menú.
 

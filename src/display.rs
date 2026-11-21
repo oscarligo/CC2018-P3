@@ -1,5 +1,8 @@
 use raylib::prelude::*;
 
+pub const CONTENT_WIDTH: i32 = 800;
+pub const CONTENT_HEIGHT: i32 = 600;
+
 pub fn viewport(width: i32, height: i32, content_width: u32, content_height: u32) -> Camera2D {
     let zoom = (width.max(1) as f32 / content_width as f32)
         .min(height.max(1) as f32 / content_height as f32);
@@ -21,8 +24,8 @@ pub fn update(window: &mut RaylibHandle) {
     let camera = viewport(
         window.get_screen_width(),
         window.get_screen_height(),
-        800,
-        600,
+        CONTENT_WIDTH as u32,
+        CONTENT_HEIGHT as u32,
     );
     window.set_mouse_offset(Vector2::new(-camera.offset.x, -camera.offset.y));
     window.set_mouse_scale(1.0 / camera.zoom, 1.0 / camera.zoom);
