@@ -62,6 +62,9 @@ impl<'a> DoomsdayAudio<'a> {
             self.hum.stop();
         }
         for cue in cues {
+            if *cue == Cue::Explosion {
+                continue;
+            }
             let index = match cue {
                 Cue::Tap => 0,
                 Cue::Ready => 1,

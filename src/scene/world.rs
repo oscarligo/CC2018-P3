@@ -396,6 +396,7 @@ pub struct World {
     destroyed: Vec<WorldEntry>,
     debris: Vec<ObjectId>,
     next_object_id: u64,
+    pub(crate) destruction_count: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -540,6 +541,7 @@ impl World {
         let (removed, remaining): (Vec<_>, Vec<_>) = std::mem::take(&mut self.objects)
             .into_iter()
             .partition(|e| e.object.transform().anchor().belongs_to(&root));
+        self.destruction_count += 1;
         self.destroyed.extend(removed);
         self.objects = remaining;
         let debris_id = self.add(crate::scene::debris::PlanetDebris::new(
@@ -570,6 +572,13 @@ impl World {
         self.objects
             .iter()
             .find_map(|entry| entry.object.light_position())
+    }
+
+    pub(crate) fn is_primary_light(&self, id: ObjectId) -> bool {
+        self.objects
+            .iter()
+            .find(|entry| entry.id == id)
+            .is_some_and(|entry| entry.object.light_position().is_some())
     }
 
     pub fn update(&mut self, update: &WorldUpdate) {

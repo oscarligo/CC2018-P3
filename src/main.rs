@@ -21,6 +21,8 @@ use scene::{Starfield, build_solar_system};
 use ship::{InputState, RocketAudio, ShipMovement};
 use ship::{
     alien_audio::AlienAudio,
+    ambient_audio::AmbientAudio,
+    car_weapons::CarWeapons,
     commands::{Command, CommandReader},
     doomsday::{Controls as WeaponControls, Doomsday, DoomsdayAudio},
     menu::{TravelMenu, choose_vehicle, draw_hangar_return, hangar_requested},
@@ -108,7 +110,9 @@ fn main() {
         let mut framebuffer =
             Framebuffer::new(WINDOW_WIDTH as u32, WINDOW_HEIGHT as u32, Color::BLACK);
         let mut world = build_solar_system();
+        let total_planets = world.travel_targets().len();
         let mut selected = 0;
+        let mut solar_return = false;
         'hangar: loop {
             let car = Vehicle::car();
             let car_radius = car.radius;
@@ -124,13 +128,16 @@ fn main() {
                 &mut renderer,
                 &mut vehicles,
                 selected,
+                solar_return,
             ) else {
                 return;
             };
             selected = choice;
+            solar_return = false;
             // Each departure owns its audio and transient state; returning drops them all.
             let mut rocket_audio = RocketAudio::new(&audio);
             let mut alien_audio = AlienAudio::new(&audio);
+            let mut ambient_audio = AmbientAudio::new(&audio);
             let mut performance = PerformanceMonitor::default();
             let mut interaction = InteractionSystem::default();
             while window.get_char_pressed().is_some() {}
@@ -141,6 +148,10 @@ fn main() {
                 .expect("nave seleccionada");
             let is_destroyer = vehicle.kind == VehicleKind::Destroyer;
             let mut weapon = Doomsday::default();
+            let mut planet_finder = ship::planet_finder::PlanetFinder::default();
+            let mut car_weapons =
+                (vehicle.kind == VehicleKind::Car).then(|| CarWeapons::new(vehicle.radius));
+            let car_muzzles = vehicle.car_laser_muzzles();
             let mut weapon_audio = is_destroyer.then(|| DoomsdayAudio::new(&audio));
             let mut travel = TravelMenu::default();
             let mut commands = CommandReader::default();
@@ -168,7 +179,13 @@ fn main() {
                 rocket_audio.moving_duration(),
                 vehicle.kind == VehicleKind::Saucer,
             );
+            if vehicle.kind == VehicleKind::Car {
+                movement.configure_unbounded_car_thrust();
+            }
             movement.update(&InputState::read(&window), 0.0, &mut uniforms, &world);
+
+            let intro_destination = movement.position();
+            let mut intro_time = (vehicle.kind == VehicleKind::Car).then_some(-6.0_f32);
 
             while !window.window_should_close() {
                 display::update(&mut window);
@@ -184,6 +201,21 @@ fn main() {
                 let update_start = Instant::now();
                 world.update(&WorldUpdate { frame_time });
                 let targets = world.travel_targets();
+                let intro_active = intro_time.is_some();
+                if intro_active && let Some(radio) = &mut radio {
+                    radio.poll_intro();
+                    if let Some(time) = &mut intro_time {
+                        if *time < 0.0 {
+                            *time = (*time + window.get_frame_time()).min(0.0);
+                            if *time == 0.0 {
+                                radio.start_intro();
+                            }
+                        } else if radio.intro_ready() {
+                            *time = (*time + window.get_frame_time()).min(27.0);
+                        }
+                    }
+                }
+                let intro_fade = intro_time.map_or(0, ship::intro_entry_fade);
                 let was_open = travel.open;
                 let was_weapon_busy = weapon.busy();
                 if !was_open && !was_weapon_busy && window.is_key_pressed(KeyboardKey::KEY_ESCAPE) {
@@ -193,7 +225,8 @@ fn main() {
                 let mut open_jump = false;
                 let mut radio_toggled = false;
                 while let Some(ch) = window.get_char_pressed() {
-                    if !travel.open
+                    if !intro_active
+                        && !travel.open
                         && !weapon.busy()
                         && let Some(command) = commands.push(ch)
                     {
@@ -214,7 +247,8 @@ fn main() {
                         }
                     }
                 }
-                let radio_mouse = radio.as_mut().is_some_and(|r| r.update(&window));
+                let radio_mouse =
+                    !intro_active && radio.as_mut().is_some_and(|r| r.update(&window));
                 let jump = travel.update(&mut window, vehicle.kind, open_jump, &targets);
                 if let Some(index) = jump
                     && movement.teleport(&targets[index], &world)
@@ -250,7 +284,14 @@ fn main() {
                     }
                 }
                 let weapon_blocked = was_weapon_busy || weapon.busy();
-                let blocked = was_open || travel.open || jump.is_some() || weapon_blocked;
+                let blocked =
+                    intro_active || was_open || travel.open || jump.is_some() || weapon_blocked;
+                if vehicle.kind == VehicleKind::Car
+                    && !blocked
+                    && window.is_key_pressed(KeyboardKey::KEY_N)
+                {
+                    planet_finder.toggle(&targets);
+                }
                 let mut input = if blocked {
                     InputState::default()
                 } else {
@@ -279,14 +320,25 @@ fn main() {
                     input.orbiting = false;
                     input.zoom_delta = 0.0;
                     input.firing = false;
+                    input.firing_held = false;
                 }
-                if weapon_blocked && let Some(target) = weapon.target.or(previous_target) {
+                if let Some(time) = intro_time {
+                    movement.intro_frame(
+                        time.max(-3.0),
+                        frame_time,
+                        intro_destination,
+                        &mut uniforms,
+                    );
+                    if time >= 27.0 {
+                        intro_time = None;
+                    }
+                } else if weapon_blocked && let Some(target) = weapon.target.or(previous_target) {
                     movement.weapon_station(
                         &previous_target.unwrap_or(target),
                         &target,
                         frame_time,
                         &mut uniforms,
-                        &world,
+                        &mut world,
                     );
                 } else {
                     movement.update(
@@ -296,6 +348,21 @@ fn main() {
                         &world,
                     );
                 }
+                if let Some(car_weapons) = &mut car_weapons {
+                    let matrix = uniforms.model_matrix;
+                    let muzzles = car_muzzles.map(|point| model_point(&matrix, point));
+                    let forward = Vector3::new(matrix.m8, matrix.m9, matrix.m10).normalize();
+                    if car_weapons.update(
+                        frame_time,
+                        input.firing,
+                        input.firing_held,
+                        muzzles,
+                        forward,
+                        &mut world,
+                    ) {
+                        alien_audio.play(&[ship::alien::Cue::Laser]);
+                    }
+                }
                 vehicle.weapon_charge = weapon.charge;
                 vehicle.weapon_open = weapon.bay_open;
                 vehicle.bomb_visible = weapon.bomb_visible();
@@ -304,6 +371,12 @@ fn main() {
                     audio.update(&weapon, &weapon_cues, frame_time);
                 }
                 let radio_active = radio.as_ref().is_some_and(CarRadio::is_playing);
+                ambient_audio.update(
+                    &world,
+                    movement.position(),
+                    radio.as_ref().is_some_and(CarRadio::visible),
+                    frame_time,
+                );
                 let effects_gain = rocket_audio.set_radio_active(radio_active, frame_time);
                 alien_audio.set_impact_gain(effects_gain);
                 alien_audio.set_paused(travel.open);
@@ -322,7 +395,7 @@ fn main() {
                 uniforms.light_position = world.primary_light_position();
                 interaction.update(&mut world, &uniforms, input.interact_pressed, frame_time);
                 rocket_audio.update(
-                    input.thrust,
+                    input.thrust || intro_active,
                     input.braking,
                     movement.is_moving() && !travel.open && !weapon_blocked,
                     movement.can_accelerate(),
@@ -342,6 +415,9 @@ fn main() {
                 vehicle.draw(&mut renderer, &mut framebuffer, &draw_uniforms, elapsed);
                 movement.draw_trail(&mut framebuffer, &draw_uniforms);
                 movement.draw_exhaust(&mut framebuffer, &draw_uniforms);
+                if let Some(car_weapons) = &car_weapons {
+                    car_weapons.draw(&mut framebuffer, &draw_uniforms, &world);
+                }
                 let launch_origin = vehicle.muzzle.map_or(movement.position(), |p| {
                     model_point(&uniforms.model_matrix, p)
                 });
@@ -353,7 +429,7 @@ fn main() {
                 framebuffer.present_with_overlay_bottom(
                     &mut window,
                     &thread,
-                    if travel.open || weapon_blocked {
+                    if intro_active || travel.open || weapon_blocked {
                         None
                     } else {
                         interaction.overlay()
@@ -361,7 +437,7 @@ fn main() {
                     if radio_visible { PANEL_HEIGHT + 32 } else { 14 },
                     |d| {
                         travel.draw(d, vehicle.kind, &targets, jump_flash);
-                        if !travel.open && !weapon_blocked {
+                        if !intro_active && !travel.open && !weapon_blocked {
                             movement.draw_navigation(d);
                         }
                         if !travel.open
@@ -369,15 +445,45 @@ fn main() {
                         {
                             alien.draw_hud(d);
                         }
-                        if let Some(radio) = &radio {
+                        if !intro_active && let Some(radio) = &radio {
                             radio.draw(d);
                         }
                         if is_destroyer && !travel.open {
                             weapon.draw_hud(d, aim, &draw_uniforms);
                         }
+                        if let Some(car_weapons) = &car_weapons
+                            && !intro_active
+                            && !travel.open
+                        {
+                            car_weapons.draw_hud(d, &draw_uniforms);
+                            planet_finder.draw(d, &world, &draw_uniforms);
+                        }
+                        if !intro_active && !travel.open && !weapon_blocked {
+                            draw_flight_status(
+                                d,
+                                world.travel_targets().len(),
+                                total_planets,
+                                movement.speed(),
+                                movement.speed_multiple(),
+                            );
+                        }
                         draw_hangar_return(d);
+                        if let Some(car_weapons) = &car_weapons {
+                            car_weapons.draw_finale(d);
+                        }
+                        if intro_fade > 0 {
+                            d.draw_rectangle(0, 0, 800, 600, Color::new(0, 0, 0, intro_fade));
+                        }
                     },
                 );
+                if car_weapons
+                    .as_ref()
+                    .is_some_and(CarWeapons::finale_complete)
+                {
+                    world = build_solar_system();
+                    solar_return = true;
+                    continue 'hangar;
+                }
                 let mut metrics = renderer.metrics();
                 metrics.update = update_time;
                 metrics.frame = frame_start.elapsed();
@@ -387,6 +493,45 @@ fn main() {
             return;
         }
     });
+}
+
+fn speed_meter_fill(speed_multiple: f32) -> f32 {
+    ((1.0 + 9.0 * speed_multiple.max(0.0)).ln() / 10_000.0_f32.ln()).clamp(0.0, 1.0)
+}
+
+fn draw_flight_status(
+    d: &mut RaylibDrawHandle,
+    remaining_planets: usize,
+    total_planets: usize,
+    speed: f32,
+    speed_multiple: f32,
+) {
+    const X: i32 = 16;
+    const Y: i32 = 558;
+    const WIDTH: i32 = 400;
+    const HEIGHT: i32 = 28;
+    const BAR_X: i32 = 254;
+    const BAR_WIDTH: i32 = 146;
+
+    d.draw_rectangle(X, Y, WIDTH, HEIGHT, Color::new(5, 14, 30, 225));
+    d.draw_rectangle_lines(X, Y, WIDTH, HEIGHT, Color::new(74, 125, 174, 230));
+    d.draw_text(
+        &format!("PLANETAS {remaining_planets}/{total_planets}"),
+        X + 10,
+        Y + 7,
+        14,
+        Color::new(224, 236, 246, 255),
+    );
+    d.draw_text(
+        &format!("VEL {speed:.0}"),
+        X + 132,
+        Y + 7,
+        14,
+        Color::new(224, 236, 246, 255),
+    );
+    d.draw_rectangle(BAR_X, Y + 8, BAR_WIDTH, 12, Color::new(12, 29, 48, 255));
+    let fill = (BAR_WIDTH as f32 * speed_meter_fill(speed_multiple).clamp(0.0, 1.0)) as i32;
+    d.draw_rectangle(BAR_X, Y + 8, fill, 12, Color::new(100, 220, 255, 255));
 }
 
 fn model_point(m: &Matrix, p: Vector3) -> Vector3 {
@@ -699,6 +844,14 @@ fn build_benchmark_world(object_count: usize) -> World {
 #[cfg(test)]
 mod benchmark_tests {
     use super::*;
+
+    #[test]
+    fn speed_meter_remains_useful_at_extreme_speeds() {
+        assert_eq!(speed_meter_fill(0.0), 0.0);
+        assert!(speed_meter_fill(1.0) > 0.2);
+        assert!(speed_meter_fill(100.0) > speed_meter_fill(1.0));
+        assert_eq!(speed_meter_fill(1_000_000.0), 1.0);
+    }
 
     #[test]
     fn travel_catalog_stays_stable_when_rendering_reorders_the_world() {

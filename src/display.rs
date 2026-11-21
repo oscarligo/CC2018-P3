@@ -1,4 +1,11 @@
 use raylib::prelude::*;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static CRT_ENABLED: AtomicBool = AtomicBool::new(false);
+
+pub fn crt_enabled() -> bool {
+    CRT_ENABLED.load(Ordering::Relaxed)
+}
 
 pub const CONTENT_WIDTH: i32 = 800;
 pub const CONTENT_HEIGHT: i32 = 600;
@@ -18,6 +25,9 @@ pub fn viewport(width: i32, height: i32, content_width: u32, content_height: u32
 }
 
 pub fn update(window: &mut RaylibHandle) {
+    if window.is_key_pressed(KeyboardKey::KEY_F10) {
+        CRT_ENABLED.fetch_xor(true, Ordering::Relaxed);
+    }
     if window.is_key_pressed(KeyboardKey::KEY_F11) {
         window.toggle_borderless_windowed();
     }
