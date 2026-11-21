@@ -1,406 +1,111 @@
-# CC2018 - P3
+# CC2018 — Proyecto 3: Space Travel
 
-## Estructura de `src`
+Aplicación en Rust para recorrer un sistema solar con una nave y cámara en tercera persona. La geometría, proyección, rasterización, profundidad y shaders se calculan en CPU con un renderer propio; raylib proporciona la ventana, la entrada y el audio.
 
-- `celestial_shaders/`: apariencia procedural de estrellas y planetas.
-- `objects/`: cuerpos y elementos renderizables del sistema solar.
-- `rendering/`: framebuffer, geometría, proyección, shaders y rasterización.
-- `scene/`: mundo, catálogo de planetas, sistema solar y fondo estelar.
-- `ship/`: controles, movimiento, cámara, efectos y audio de la nave.
-- `main.rs`: ciclo de ejecución y benchmark.
-- `noise.rs` y `performance.rs`: utilidades transversales.
+## Funcionalidades implementadas
 
-## Ejecución
+### Sistema solar y mundos explorables
 
-Al iniciar aparece un hangar con vista previa 3D. Elige con `1` / `2` / `3`, flechas o
-clic y pulsa `Enter` o **Despegar**:
+El escenario contiene **32 cuerpos celestes**: los 30 del catálogo base, más Kashyyyk y Coruscant. Incluye estrellas, planetas rocosos, gigantes gaseosos y lunas, con superficies procedurales, atmósferas, anillos y distintas velocidades de rotación. Los planetas orbitan alrededor del sol y las lunas acompañan a sus cuerpos principales. Dos aros Dyson giran alrededor de la estrella central.
 
-- **Carro original:** conserva su modelo, controles y propulsión.
-- **Ovni / gato alien:** platillo metálico con luces verdes, cúpula transparente
-  y piloto felino con antenas. Su aceleración y velocidad máxima son tres veces
-  las del carro; sus partículas y estelas son verdes.
-- **Nave maligna / Destructor Estelar (3):** nave original inspirada en un Destructor Estelar, con
-  casco triangular, ciudadela escalonada, puente, cúpulas, torretas, motores azules
-  y una bahía ventral animada para la bomba planetaria.
+![Sol, aros Dyson, planetas y fondo estelar](demo/sistema-solar.png)
 
-Durante el juego, pulsa **F1** o haz clic en **Cambiar nave**, en la esquina superior
-derecha, para regresar al hangar. La selección conserva la última nave elegida.
-Al despegar de nuevo, el vehículo comienza desde la posición inicial y los planetas
-conservan su estado; el mundo se pausa mientras estás en el hangar. Volver al hangar
-detiene la radio y el audio, y cancela el sobrevuelo, los modos especiales y cualquier
-secuencia de la bomba en curso. **Esc** sigue cerrando el juego fuera de los menús.
+Cuatro planetas incorporan detalles propios:
 
-La franja inferior muestra cuántos planetas quedan respecto al total inicial y la
-velocidad actual. La barra del velocímetro usa una escala logarítmica para conservar
-detalle incluso cuando el carro acumula velocidades muy superiores a la inicial.
+| Mundo | Características |
+| --- | --- |
+| Kashyyyk | Bosques y una aldea con construcciones sobre la superficie. |
+| Coruscant | Ciudad planetaria con torres, edificios y trazados luminosos. |
+| Ureski | Desierto, tundra y cinturón templado con flora y dos especies animadas; mantiene una cara orientada al sol. |
+| Alfa Riddertal | Gigante gaseoso rosado con núcleo animado y seis estaciones orbitales que intercambian señales luminosas. |
 
-Cuando el carro destruye todos los planetas, sus láseres pueden dañar también el Sol.
-Al destruirlo se produce una explosión solar, la pantalla queda cubierta por un destello
-blanco y el sistema se reinicia antes de regresar al hangar.
+| Kashyyyk: aldea | Coruscant: sobrevuelo |
+| --- | --- |
+| ![Aldea de Kashyyyk](demo/kashyyyk.png) | ![Ciudad de Coruscant](demo/coruscant.png) |
 
-### Destructor Estelar y bomba planetaria
+| Ureski: biomas | Alfa Riddertal: núcleo y estaciones |
+| --- | --- |
+| ![Biomas de Ureski](demo/ureski.png) | ![Alfa Riddertal y sus estaciones](demo/alfa-riddertal.png) |
 
-Selecciona **3 — Nave maligna** en el hangar. Conserva los controles de vuelo y el vuelo local
-con `L`; también permite viajar escribiendo `3.14`, igual que el ovni.
-Apunta la mira de la proa hacia un planeta cercano: aparecerán su nombre y
-unas esquinas rojas alrededor del objetivo. El sol no es un objetivo válido.
+![Flora y fauna originales en la superficie de Ureski](demo/ureski-superficie.png)
 
-1. **B:** fija el planeta y abre la bahía. La nave acompaña su órbita durante
-   la operación; las órbitas del sistema continúan y no se cambia de escena.
-2. **J, pulsar y soltar rápidamente:** cada pulsación aporta hasta 6,5 puntos
-   porcentuales a la carga. Mantener la tecla o la repetición del teclado no
-   sirve. El reactor pierde entre 17 y 42 puntos por segundo, según su carga:
-   la parte final exige sostener aproximadamente siete pulsaciones por segundo.
-   La estabilización exige **al menos 15 segundos pulsando**, incluso a un ritmo
-   mayor; esperar sin pulsar no adelanta ese tiempo. Si el reactor se vacía,
-   la estabilización vuelve a comenzar. A seis pulsaciones por segundo no se
-   consigue terminar. A 60 FPS, siete pulsaciones por segundo completan la carga
-   en unos 15,2 segundos. El panel muestra el porcentaje, las pulsaciones del
-   último segundo y los segundos de estabilización pendientes.
-3. El tono del reactor sube y baja con la carga real. Se intensifican la luz,
-   los conductos y una vibración leve. Los sonidos se sintetizan en CPU.
-4. **La pregunta aparece al llegar al 100 %**, después de estabilizar el reactor.
-   La carga queda asegurada y se abre el diálogo
-   **«¿Estás seguro de que quieres exterminar un planeta completo?»** con
-   **«Sí, lanzar»** y **«Ay noooo»**. La cancelación está seleccionada inicialmente.
-   Usa **flechas** y después **Enter**; `J` nunca confirma el lanzamiento.
-5. **B / Esc** cancelan la carga o la confirmación. Perder el foco de la ventana
-   también cancela esas fases. Una vez autorizado el lanzamiento, la bomba
-   persigue la posición actual del planeta, aparecen grietas luminosas y una
-   onda expansiva, y el planeta se convierte en escombros animados.
+### Vehículos, cámara y navegación
 
-La destrucción retira también los objetos unidos al planeta, incluidos modelos
-de superficie, atmósfera, anillos y satélites, además de sus colisiones y destinos
-de viaje. Al terminar la secuencia, **F8** restaura todos los planetas destruidos
-y sus objetos, conservando sus identificadores, sin reiniciar el programa.
-Los demás vehículos conservan sus funciones. `Esc` fuera de un menú o de la
-secuencia del arma cierra el juego.
+El hangar permite elegir entre **Rampage** (carro espacial), **Jor-Jor Gé** (ovni con piloto felino) y **El Chemax** (destructor estelar). Jor-Jor Gé se construye con geometría propia; El Chemax utiliza modelos OBJ originales del proyecto. La cámara sigue al vehículo, permite orbitar con el ratón y ajustar el zoom. El vuelo admite giro, cabeceo y alabeo en 3D.
 
-El casco, las compuertas, la bomba, las grietas y los fragmentos se transforman
-y dibujan en el pipeline de software. La nave se carga desde
-`assets/star_destroyer.obj`; las piezas móviles usan `star_destroyer_door.obj`
-y `star_destroyer_bomb.obj`, con materiales compartidos en `star_destroyer.mtl`.
-Son recursos OBJ editables; el cargador propio conserva los colores `Kd` y las
-luces `Ke` del MTL, y las piezas se animan mediante transformaciones independientes.
-El modelo y los sonidos son originales,
-creados para este proyecto con asistencia de Codex/IA; no se descargaron modelos
-ni audio de Star Wars.
+El modo de sobrevuelo mantiene una altura sobre un planeta y acompaña su órbita. Jor-Jor Gé y El Chemax también permiten elegir un destino y teletransportarse a una posición libre frente a él. Con `F` se consulta una ficha del cuerpo apuntado.
 
-Para generar capturas del hangar, la bahía, la carga, el diálogo, el lanzamiento,
-la destrucción y la cancelación, además de los WAV, sin reproducir audio:
+| Rampage | Jor-Jor Gé | El Chemax |
+| --- | --- | --- |
+| ![Modelo de Rampage](demo/carro.png) | ![Modelo de Jor-Jor Gé con piloto felino](demo/ovni.png) | ![Modelo de El Chemax](demo/destructor.png) |
+
+### Efectos e interacción
+
+- **Jor-Jor Gé:** `achu` activa una aceleración caótica con partículas y estela verde; `mishmish` activa dianas orbitales que se destruyen con disparos.
+- **Rampage:** faros, luces de frenado, radio MP3, introducción cinematográfica y láseres capaces de destruir planetas. Al destruir todos, puede atacar el sol y reiniciar el sistema.
+- **El Chemax:** `B` fija un planeta cercano y abre la bahía; pulsaciones repetidas de `J` cargan el reactor durante al menos 15 segundos. Una confirmación permite lanzar la bomba, que genera grietas, una onda expansiva y escombros. `F8` restaura los planetas al terminar la secuencia.
+- **Colisiones:** se comprueba el recorrido del volumen de la nave para evitar atravesar cuerpos celestes a alta velocidad. El choque produce rebote, destello, partículas, sonido y sacudida de cámara. La cámara también ajusta su posición para evitar penetrar los cuerpos.
+
+| Jor-Jor Gé durante `achu` | Impacto contra un planeta |
+| --- | --- |
+| ![Jor-Jor Gé con piloto felino y efecto de aceleración](demo/ovni-achu.png) | ![Efecto de colisión de Jor-Jor Gé](demo/colision.png) |
+
+## Cumplimiento de la rúbrica
+
+Los estados describen la implementación y la evidencia disponible; la puntuación final corresponde al evaluador. Los dos criterios subjetivos son **rendimiento y estética** (30 y 20 puntos en la rúbrica; la imagen no especifica cuál peso corresponde a cada uno).
+
+| Criterio | Máximo | Implementación y evidencia |
+| --- | ---: | --- |
+| Rendimiento y estética (subjetivos) | 50 (30 + 20) | Se presentan optimizaciones y decisiones visuales abajo; sujetos a evaluación. |
+| Planetas, estrellas o lunas: 5 elementos | 50 | Implementado: 32 cuerpos. Las capturas muestran, entre otros, el sol, Kashyyyk, Coruscant, Ureski y Alfa Riddertal. |
+| Warping | 20 | Parcial respecto al criterio: existe teletransporte con `3.14`, pero el salto es instantáneo. No se acredita el efecto animado de warping; la equivalencia con los 10 puntos por implementación queda a criterio del evaluador. |
+| Nave modelada por el equipo que siga la cámara | 30 | Modelos propios de Jor-Jor Gé y El Chemax, con cámara de seguimiento en tercera persona. Se muestran arriba; el seguimiento se verifica durante el vuelo. |
+| Skybox con estrellas en el horizonte | 10 | Fondo estelar procedural de 600 estrellas en tres capas con parallax, visible en las capturas. Cumple la función visual mediante puntos proyectados, sin un cubo de texturas. |
+| Condicionales que eviten atravesar elementos | 10 | Barrido de colisiones para la nave y ajuste de cámara; el impacto se muestra arriba. Usa volúmenes esféricos conservadores, sin colisión por triángulo con árboles, edificios o anillos. |
+| Movimiento 3D de cámara | 40 | Seguimiento de la orientación, órbita con ratón y zoom; se comprueba con los controles de vuelo. |
+| Órbitas de planetas | 20 | Actualización temporal de planetas y lunas con ejes y velocidades propios; visible al dejar avanzar la simulación. |
+
+### Rendimiento
+
+El renderer usa descarte de objetos fuera de cámara, descarte de caras, prueba de profundidad y niveles de detalle según distancia. Los mundos detallados reducen geometría lejana; Ureski reutiliza un mapa de biomas y descarta vida detrás del horizonte, mientras Alfa Riddertal utiliza una caché de sombreado por cuadro. El audio de la radio se procesa en un hilo independiente.
+
+Se dispone de un benchmark de 240 cuadros a 800 × 600 que informa tiempo medio, percentil 95, FPS de CPU y contadores de geometría y fragmentos:
 
 ```bash
-cargo run --release -- --preview-doomsday
-```
-
-La verificación usa una ventana oculta y controles simulados sobre la lógica real;
-también comprueba la restauración. Los archivos quedan en `target/previews/destroyer-*`.
-Las constantes de dificultad están en `src/ship/doomsday.rs`.
-
-El ovni está modelado mediante geometría propia en `src/ship/vehicle.rs`:
-casco, aros, paneles, tornillos, consola, gato y cúpula se construyen en CPU.
-La cúpula se dibuja después del piloto con transparencia y reflejos según el
-ángulo de visión. Todo utiliza el rasterizador por software del proyecto.
-
-### Persona 3: planetas y navegación cercana
-
-Los dos mundos de esta contribución son **Ureski** y **Alfa Riddertal**.
-Sustituyen las dos propuestas provisionales, sin duplicar cuerpos del catálogo.
-Sus módulos están en
-`src/scene/planets/exploration/` y `exploration.rs`:
-
-- **Ureski:** desierto dorado permanente, tundra azul nocturna y un cinturón
-  verde de primavera eterna. Su cara local +X permanece apuntando al sol
-  mediante rotación sincronizada: orbita, pero no tiene un ciclo de día y noche.
-  El crepúsculo es una región fija de su geografía. Allí crecen árboles de copas
-  escalonadas y helechos con flores luminosas; saltarines verdes de antenas
-  doradas y mantas violetas recorren la vegetación. Los saltos, la compresión
-  del cuerpo, el aleteo, el paseo y el balanceo vegetal se animan con el tiempo.
-- **Alfa Riddertal:** gigante de gas rosado con corrientes atmosféricas y un
-  núcleo que aparece en tres estados superpuestos. Sus filamentos y ojos
-  cambian con el tiempo y la dirección de observación. Es una representación
-  visual de una entidad que custodia el pasado humano, no una simulación
-  cuántica ni una conexión a un archivo real. Seis estaciones originales
-  orbitan en planos y sentidos distintos. Alternan consultas cian hacia el
-  planeta y respuestas rosadas hacia las estaciones, con paquetes luminosos
-  en movimiento, pausas de comunicación y destellos en los puntos de enlace.
-
-La flora, las dos especies animales y las estaciones son geometría original
-construida en CPU, distinta de los modelos de Kashyyyk y Coruscant.
-Las ubicaciones se generan con ruido procedural y semillas reproducibles
-(`LIFE_SEED`); la vida está confinada al cinturón templado y permanece orientada
-hacia fuera mientras el planeta orbita. Cada modelo tiene dos niveles de
-detalle y participa en el descarte del mundo. Ureski usa un shader de biomas;
-Alfa Riddertal compone el gas y las apariciones interiores analíticamente a lo
-largo del rayo de la cámara en un shader de fragmentos de CPU. El framebuffer
-resuelve la profundidad de los modelos y los haces, incluidos sus ocultamientos.
-Para mantener el vuelo interactivo, Ureski reutiliza un mapa de biomas calculado
-en CPU y descarta la vida que queda oculta tras el horizonte. Los modelos
-comparten vértices dentro de sus facetas y reducen el detalle a distancia.
-El núcleo de Alfa Riddertal se calcula en una caché de sombreado alineada con
-la cámara, renovada en cada cuadro y muestreada durante la rasterización;
-la geometría, la proyección y la profundidad siguen en el pipeline propio.
-
-**L: activar/desactivar sobrevuelo**, disponible en los tres vehículos.
-Acércate primero a un planeta (también puedes usar `3.14` con el ovni o el destructor).
-Al pulsar **L**, la nave se aproxima suavemente a una altura baja y comienza a rodear
-el planeta cercano, acompañando su órbita. No hace falta mantener una tecla para avanzar.
-La cámara conserva la vista habitual detrás de la nave, centrada en ella y un poco
-más cerca. El terreno y la curvatura se ven debajo y por delante durante el vuelo.
-La cámara mantiene su distancia respecto a la nave aunque el planeta sea grande.
-Al terminar la aproximación, el sobrevuelo conserva la altura.
-
-**Espacio** acelera el sobrevuelo; al soltarlo vuelve al crucero tranquilo.
-**Shift** frena hasta detenerse y mantiene el sobrevuelo pausado; **Espacio**
-reanuda la marcha. **A/D** cambian el rumbo y **W/S** permiten bajar o subir con
-una inclinación limitada; también cancelan la aproximación automática para tomar
-el control de la altura. Al soltar **W/S**, el morro vuelve suavemente al horizonte
-y la altura se estabiliza. **L** sale del modo conservando la posición y la velocidad.
-El teletransporte y `achu` abandonan el sobrevuelo; si te alejas mucho del planeta,
-recuperas el vuelo espacial automáticamente.
-
-El giro y la cámara usan suavizado exponencial. La integración de navegación
-se divide en pasos de como máximo 1/120 s, manteniendo una respuesta consistente
-a 30, 60 y 144 FPS. Las colisiones siguen comprobando el volumen completo del
-vehículo y generan rebote, explosión y sonido.
-
-Para demostrar esta contribución: elige el ovni, salta a uno de estos planetas,
-acércate para observar sus modelos, pulsa **L** para rodearlo automáticamente,
-cambia la altura con **W/S**, frena y sal con **L** para alejarte. Repite en el
-otro planeta. Las inspecciones con **F** describen sus nuevas identidades.
-
-Verificación automatizada: vuelta completa sin deriva de altura, seguimiento
-de un planeta en órbita, comparación del vuelo a distintos FPS, rebotes de
-ambos vehículos, semillas reproducibles, hábitats, saltos reales, bloqueo
-solar de Ureski durante su órbita, estaciones orbitales, comunicación en
-ambos sentidos, animación del núcleo y geometría con dos niveles de detalle.
-Para generar capturas de los planetas integrados sin ventana ni sonido:
-
-```bash
-cargo run --release -- --preview-persona3
-```
-
-Las imágenes quedan en `target/previews/persona3-*.png`. La atracción
-gravitatoria figura como **opcional** en la planificación y no está activada
-ni implementada como fuerza física; el vuelo local es una ayuda de control.
-El video y los nombres de los integrantes siguen correspondiendo a la entrega
-compartida. Esta ampliación se desarrolló con asistencia de Codex/IA; los modelos
-de flora, fauna y estaciones son propios del proyecto, sin descargas externas.
-
-### Teletransporte del ovni y del destructor
-
-Durante el vuelo, escribe la secuencia `3.14` (sin Enter, en menos de cinco
-segundos entre caracteres). También acepta la coma decimal del teclado numérico.
-Se abre un menú dividido en **Mundos principales** (Kashyyyk, Coruscant,
-Ureski y Alfa Riddertal, siempre visibles) y **Otros destinos** (paginados).
-Usa flechas, rueda o clic para seleccionar y **Enter / Teletransportar** para saltar;
-`Esc` cancela. Las flechas y la rueda recorren las páginas del menú.
-
-La simulación orbital continúa mientras consultas el menú; el vuelo se suspende.
-El salto utiliza la posición actual del destino, busca espacio libre fuera del
-planeta y sus anillos, detiene el ovni, lo orienta hacia el planeta y reinicia
-la cámara y las partículas. Las lunas y el sol principal no son destinos.
-En vuelo, `Esc` cierra el programa.
-
-### Travesuras del ovni
-
-Escribe los comandos durante el vuelo, sin Enter. No distinguen mayúsculas y
-aceptan hasta cinco segundos entre caracteres. Las interfaces del hangar,
-teletransporte y modos usan azul; la energía del ovni sigue siendo verde.
-
-- **`achu`:** carga de 1,05 segundos con temblor y compresión del platillo,
-  seguida de 3,8 segundos de vuelo caótico. La velocidad llega aproximadamente
-  a 25 veces la velocidad base del ovni, con nube verde expansiva, destello,
-  estela luminosa y silbidos que recorren ambos canales de los audífonos.
-  Al terminar recuperas el control y la velocidad vuelve al rango normal.
-- **`mishmish`** (todo junto): activa o desactiva el modo de puntería. Aparecen
-  dianas de una en una, orbitando al gato con una estela verde. Su movimiento
-  depende del tiempo y del piloto, sin seguir al ratón. Tú diriges el vuelo.
-  Mueve la mira azul con el ratón y pulsa **clic izquierdo** para disparar un
-  pulso verde desde el borde del ovni. Los planetas bloquean los disparos.
-  Solo acertar con el láser destruye la diana y suma un punto; después de una
-  breve pausa aparece la siguiente. Pasar junto a ella no la recoge.
-- **Espacio:** acelera el vehículo.
-- **R:** hace girar al ovni. Mantenerla pulsada sostiene la pirueta;
-  al soltarla se amortigua suavemente, sin girar la cámara ni dirigir el vuelo.
-  El clic izquierdo queda dedicado al disparo.
-  El carro conserva **Espacio** para acelerar.
-- **Shift izquierdo:** cancela el modo especial y frena para recuperar el control.
-- Los modos son exclusivos. El teletransporte reinicia modos y efectos; el menú
-  suspende el vuelo y el audio especial mientras continúan las órbitas.
-
-### Radio del carro
-
-Coloca los archivos `.mp3` en `assets/radio/` (también acepta `.MP3`).
-Con el carro seleccionado, escribe **`fm`**, sin Enter, para encender la radio
-retro de la esquina inferior derecha. Repetir `fm` la oculta y suspende el audio;
-al encenderla de nuevo conserva la posición y el estado de pausa.
-
-Solo hay tres botones: **Anterior**, **Pausar/Reanudar** y **Siguiente**.
-La radio elige al azar evitando repetir inmediatamente la misma canción cuando
-hay otras disponibles. Cada elección nueva comienza en un punto aleatorio
-entre el 25 % y el 75 % de la canción. `Intro.mp3` queda reservada para la
-secuencia inicial y se excluye de la rotación normal.
-Al terminar una canción pasa automáticamente a otra selección aleatoria.
-
-Anterior recorre el historial con los puntos de inicio que se eligieron para
-esas canciones; Siguiente permite volver a recorrer ese historial antes de hacer
-otra selección. Cambiar de canción mientras está pausada mantiene la pausa.
-La carpeta se vuelve a revisar al encender la radio. Si está vacía o un archivo
-no se puede reproducir, el juego continúa y muestra el estado correspondiente.
-
-Mientras suena la radio, los sonidos del carro (motor, aceleración, freno,
-vuelo e impactos) bajan suavemente al 20 % de su volumen habitual. Al pausar
-o apagar la radio recuperan su volumen progresivamente.
-
-La lectura, el salto al punto aleatorio y la reproducción se ejecutan en un
-hilo de audio independiente, para que cambiar de canción no detenga el dibujo
-ni los controles. El panel muestra «SINTONIZANDO...» durante la carga.
-Se conserva el MP3 comprimido actual y se decodifica por bloques; al cambiar
-pueden coexistir brevemente el archivo anterior y el siguiente.
-Esto permite admitir nombres con tildes en Windows sin renombrar las canciones.
-La radio no está disponible en el ovni. Las inspecciones con `F` se colocan
-encima del reproductor para mantener legibles ambos paneles.
-
-Para generar una captura de la interfaz real, con ventana oculta y sin sonido:
-
-```bash
-cargo run --release -- --preview-radio
-```
-
-La captura se guarda en `target/previews/radio.png`.
-
-Para medir lectura, decodificador y salto de cada MP3, además del trabajo
-del hilo principal durante cambios asíncronos (sin sonido):
-
-```bash
-cargo run --release -- --benchmark-radio
-```
-
-### Estructura Dyson
-
-
-El sol está rodeado por exactamente dos aros gruesos de sección redondeada.
-Giran en sentidos opuestos: las celdas completan una vuelta en unos 2,6 segundos
-y sus planos giran alrededor del centro solar en unos 8 segundos. Ambos ejes
-pasan por el centro del sol, sin balanceos ni desplazamientos del centro.
-Las caras interiores son espejos plateados; el exterior tiene paneles opacos,
-oscuros y mates, sin emisión ni halo luminoso, para contrastar con los reflejos
-internos. Los bloques de paneles permiten distinguir la rotación. Todo se calcula
-en CPU.
-
-Los aros dejan visible la mayor parte del disco solar. El radio
-exterior se limita según la distancia al planeta más cercano y sus dimensiones,
-dejando margen respecto a su órbita. No se modifican órbitas ni velocidades de
-planetas. Los aros no añaden un colisionador esférico que bloquee el espacio vacío.
-
-Para generar vistas de ambos aros en distintos momentos y desde el interior:
-
-```bash
-cargo run --release -- --preview-dyson
-```
-
-Las capturas quedan en `target/previews/dyson-*.png`.
-
-### Choques
-
-Los tres vehículos chocan con los cuerpos celestes, incluidas lunas y estrellas.
-Se comprueba todo el segmento recorrido por el volumen del vehículo en cada
-frame para impedir atravesar un planeta incluso durante `achu`. El impacto
-produce una explosión luminosa, sonido grave, una breve sacudida de cámara y
-un impulso de rebote que se amortigua. Un choque cancela el estornudo.
-Las colisiones usan esferas conservadoras alrededor de los cuerpos; no son
-colisiones por triángulo con edificios, árboles o anillos.
-
-Los efectos son originales y se sintetizan al iniciar: sonido estéreo con cambios
-de intensidad entre oídos, pequeños retardos, filtrado y ecos para simular movimiento
-alrededor de la cabeza. Es una aproximación espacial para audífonos, sin HRTF
-personalizada ni dependencia de un sistema de audio “4D”.
-
-Para generar capturas de los modos y escuchar los efectos WAV por separado:
-
-```bash
-cargo run --release -- --preview-alien
-```
-
-Las capturas y muestras de audio quedan en `target/previews/`.
-
-La nave recorre el espacio siguiendo su orientación y la cámara mantiene su centro a la vista, incluso durante giros completos o vuelo invertido. Los objetos conservan sus posiciones en el mundo: al acercarte aumentan de tamaño y al pasar a su lado se desplazan en pantalla.
-
-Los fragmentos lejanos pierden contraste progresivamente y se mezclan con el fondo entre 2 500 y 14 000 unidades, aportando perspectiva atmosférica sin alterar los objetos cercanos.
-
-La niebla protege las zonas de alta luminancia para que el sol y las superficies claras de los planetas continúen distinguiéndose a gran distancia.
-
-El campo estelar está distribuido en tres capas de profundidad. Al trasladarse la cámara, las estrellas cercanas se desplazan más que las lejanas y producen parallax.
-
-Las superficies iluminadas reciben una luz de borde sutil en sus siluetas para separar mejor los volúmenes del fondo sin alterar el color base.
-
-Los objetos situados a más de 6 000 unidades reciben una profundidad de campo ligera; la nave y el entorno cercano permanecen nítidos. El modo CRT conserva su pixelado como tratamiento equivalente.
-
-Al usar el propulsor, las chispas conservan menos velocidad que la nave y forman una estela visible que se desvanece detrás de ella.
-
-El carro comienza con el doble de velocidad y, en el espacio, continúa acelerando sin un límite rígido mientras se mantenga el propulsor. El freno aumenta su fuerza a velocidades extremas para conservar el control.
-
-El carro dispone de una mira blanca fija. Cada clic dispara un láser rojo alternando entre ambos extremos delanteros; al mantenerlo presionado, los dos emisores forman haces continuos anclados al carro. La mira no selecciona planetas y los impactos producen una explosión de partículas sobre la superficie.
-
-Los planetas tienen 24 puntos de vida ocultos frente a los láseres del carro. Los impactos acumulan grietas incandescentes en la superficie y, al agotar la vida, el planeta se fragmenta mediante el sistema de destrucción existente.
-
-- `S` / `W`: elevar / bajar el morro respecto a la nave.
-- `F11`: alternar pantalla completa sin bordes en el monitor actual, tanto en el hangar como durante el vuelo. La imagen conserva sus proporciones con bandas negras cuando sea necesario; al salir se restaura la ventana.
-- `F10`: activar o desactivar el pixelado y el filtro CRT durante el juego; comienza desactivado.
-- Toda la imagen usa píxeles ampliados y un filtro CRT retro con scanlines, rejilla de fósforo, viñeta y esquinas curvas, incluida la interfaz.
-- `A` / `D`: girar a izquierda / derecha respecto a la nave.
-- `Q` / `E`: inclinarse y acompañar el giro.
-- `F`: interactuar con el cuerpo apuntado desde el centro de la cámara.
-- `Espacio`: acelerar.
-- `R` (ovni): girar sobre su eje, de forma independiente a la aceleración.
-- Clic izquierdo en `mishmish`: un disparo por pulsación.
-- `Shift izquierdo`: frenar.
-- El carro lleva faros delanteros encendidos sin haces, luces traseras encendidas y luz tenue azul verdosa desde los controles del tablero hacia la cabina. Al frenar con `Shift izquierdo`, las luces traseras aumentan su intensidad.
-- Clic derecho + movimiento del ratón: orbitar la cámara alrededor de la nave.
-- Rueda del ratón: zoom. Mover el cursor sin botones no dirige la nave.
-
-Al inspeccionar con `F`, los 32 cuerpos celestes muestran una ficha propia:
-nombre, sobrenombre y una descripción ligada a su aspecto, sus lunas o sus
-construcciones. Incluye el sol, los planetas y todas las lunas. El panel ajusta
-las líneas al ancho de la ventana y permanece visible durante ocho segundos.
-La barra del ovni recuerda `achu` y `mishmish`; los aciertos aparecen únicamente
-mientras está activo el modo de puntería.
-
-```bash
-cargo run --release
-```
-
-En Windows se necesitan Rust, las herramientas C++ de Visual Studio, CMake y
-LLVM/libclang. Si no están disponibles en la terminal actual:
-
-```powershell
-$env:Path = "C:\Program Files\CMake\bin;$env:Path"
-$env:LIBCLANG_PATH = "C:\Program Files\LLVM\bin"
-cargo run --release
-```
-
-Cierra cualquier ejecución anterior antes de recompilar: Windows bloquea el
-archivo `.exe` mientras está abierto.
-
-Para generar capturas de los tres vehículos con el renderer CPU sin abrir ventanas:
-
-```bash
-cargo run --release -- --preview-ships
-```
-
-Las imágenes se guardan en `target/previews/` (excluidas del repositorio).
-
-Para ejecutar una comparación reproducible de 240 frames sin abrir una ventana:
-
-```bash
-cargo run --release -- --benchmark
 cargo run --release -- --benchmark --objects 30
-cargo run --release -- --benchmark --objects 300
 ```
 
-Con el carro original, **N** marca un planeta al azar con la misma mira del destructor. Pulsa **N** para quitar la marca y otra vez para elegir otro planeta. La marca sigue al planeta durante su órbita.
+Estas métricas miden trabajo de CPU en una escena de prueba; no garantizan los mismos FPS durante el juego. El costo aumenta al acercarse a superficies con mucho detalle.
 
-Al despegar con el carro original un fundido de entrada de 3 segundos precede un plano fijo de 3 segundos en el que el carro pasa a alta velocidad; después comienzan la canción y la intro de 27 segundos con la radio encendida y **Intro.mp3** desde el inicio, a la mitad del volumen habitual: primer plano del conductor con apertura hacia el frente del carro al llegar al segundo 13, planos exteriores con órbitas rápidas y cortes directos en los segundos 13, 17, 20 y 23, y regreso suave a la cámara habitual al segundo 27, cuando se habilitan los controles. La aproximación comienza diez veces más lejos, con el propulsor y la estela activos. La radio continúa encendida después de la intro.
+## Ejecución y controles
 
-El paso inicial cruza hacia la izquierda. Después del plano del conductor hay una órbita alrededor de la nave (13–20 s), seguida de cámaras fijas elevadas (20–21.5 s) y diagonales traseras (21.5–23 s) y el regreso suave a la cámara de juego.
+Se requiere **Rust/Cargo compatible con la edición 2024**, CMake, un compilador C/C++ y LLVM/libclang para compilar las dependencias nativas de raylib. En Windows, instala también las herramientas C++ de Visual Studio; en macOS, las herramientas de línea de comandos de Xcode.
+
+Desde la raíz del repositorio, para que se encuentren los recursos de `assets/`:
+
+```bash
+cargo run --release
+```
+
+Selecciona `1` para Rampage, `2` para Jor-Jor Gé o `3` para El Chemax y pulsa `Enter` para despegar.
+
+| Control | Acción |
+| --- | --- |
+| `S` / `W`, `A` / `D`, `Q` / `E` | Subir/bajar el morro, girar y realizar alabeo. |
+| `Espacio` / `Shift izquierdo` | Acelerar / frenar. |
+| Clic derecho + ratón / rueda | Orbitar la cámara / zoom. |
+| `L` cerca de un planeta | Entrar o salir del sobrevuelo; en este modo, `W/S` ajustan altura y `A/D` el rumbo. |
+| `F` | Inspeccionar el cuerpo apuntado. |
+| Escribir `3.14` sin Enter | Abrir destinos con Jor-Jor Gé o El Chemax; flechas y `Enter` para viajar. |
+| Clic izquierdo | Disparar con Rampage o con Jor-Jor Gé en `mishmish`. |
+| `R` / `achu` / `mishmish` | Pirueta / aceleración especial / modo de dianas de Jor-Jor Gé. |
+| Escribir `fm` | Mostrar u ocultar la radio de Rampage; archivos MP3 en `assets/radio/`. |
+| `B`, pulsaciones de `J` | Fijar objetivo y cargar la bomba de El Chemax; confirmar con flechas y `Enter`. |
+| `F1` / `F10` / `F11` | Regresar al hangar / alternar CRT / pantalla completa. |
+| `Esc` | Cancelar un menú o la carga del arma; durante el vuelo normal, salir. |
+
+Para una demostración rápida, elige Jor-Jor Gé, escribe `3.14`, visita uno de los cuatro mundos principales y activa `L`. Prueba el giro, zoom, inspección y frenado; repite en otro mundo para comparar superficies y órbitas.
+
+Las capturas incluidas se generaron con los modos existentes `--preview-ships`, `--preview-dyson`, `--preview-persona3`, `--preview-alien`, `--benchmark-coruscant --capturas` y `--benchmark-kashyyyk --capturas`. Estos guardan los originales en `target/`; la selección documentada se conserva en [`demo/`](demo/).
+
+Los modelos originales de Jor-Jor Gé, El Chemax, flora, fauna y estaciones se desarrollaron para el proyecto con asistencia de Codex/IA.
